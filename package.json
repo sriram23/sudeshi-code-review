@@ -1,6 +1,6 @@
 {
   "name": "sudeshi-code-review",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "",
   "homepage": "https://github.com/sriram23/sudeshi-code-review#readme",
   "bugs": {
@@ -10,14 +10,29 @@
     "type": "git",
     "url": "git+https://github.com/sriram23/sudeshi-code-review.git"
   },
-  "license": "ISC",
+  "license": "MIT",
   "author": "Sriram",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "test": "vitest",
+    "lint": "eslint",
+    "format": "prettier --write .",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "typescript": "^7.0.2"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.4",
+    "eslint": "^10.11.0",
+    "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  },
+  "bin": {
+    "sudeshi-code-review": "dist/index.js"
   }
 }
