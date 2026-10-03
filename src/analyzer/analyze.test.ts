@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { analyze } from './analyze.js';
 import type { Rule } from './rule.js';
 import { dangerousHtmlRule } from './rules/dangerousHtml.js';
+import { hardcodedSecretRule } from './rules/hardcodedSecret.js';
 
 describe('analyze', () => {
   it('returns no findings for clean source code', () => {
@@ -226,6 +227,27 @@ describe('analyze', () => {
     expect(findings.map((finding) => finding.id)).toEqual([
       'rule-one',
       'rule-two',
+    ]);
+  });
+  it('runs multiple real rules against the same file', () => {
+    const findings = analyze(
+      [
+        {
+          path: 'src/App.tsx',
+          content: [
+            "const apiKey = 'my-secret';",
+            'export function App() {',
+            '  return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+            '}',
+          ].join('\n'),
+        },
+      ],
+      [hardcodedSecretRule, dangerousHtmlRule],
+    );
+
+    expect(findings.map((finding) => finding.rule)).toEqual([
+      'hardcoded-secret',
+      'dangerous-html',
     ]);
   });
 });
