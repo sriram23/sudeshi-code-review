@@ -1,29 +1,29 @@
 import type { Finding } from '../finding.js';
-import type { SourceFile } from '../sourceFile.js';
-
 import type { Rule } from '../rule.js';
 
-export const dangerousHtmlRule: Rule = (file: SourceFile) => {
+const SECRET_PATTERN = /\b(apiKey|api_key|password|secret)\s*=\s*(['"])(.*?)\2/;
+
+export const hardcodedSecretRule: Rule = (file) => {
   const findings: Finding[] = [];
   const lines = file.content.split('\n');
 
   lines.forEach((line, index) => {
-    if (!line.includes('dangerouslySetInnerHTML')) {
+    if (!SECRET_PATTERN.test(line)) {
       return;
     }
+
     findings.push({
-      id: 'dangerous-html',
+      id: 'hardcoded-secret',
       category: 'security',
       severity: 'high',
       confidence: 1,
       file: file.path,
       line: index + 1,
-      rule: 'dangerous-html',
-      message: 'dangerouslySetInnerHTML is used',
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
       evidence: line.trim(),
       requiresAIReview: true,
     });
   });
-
   return findings;
 };

@@ -1,12 +1,14 @@
 import type { Finding } from './finding.js';
-import { dangerousHtmlRule } from './rules/dangerousHtml.js';
+import type { Rule } from './rule.js';
 import type { SourceFile } from './sourceFile.js';
 
-export function analyze(files: SourceFile[]): Finding[] {
+export function analyze(files: SourceFile[], rules: Rule[]): Finding[] {
   const findings: Finding[] = [];
 
   for (const file of files) {
-    findings.push(...dangerousHtmlRule(file));
+    for (const rule of rules) {
+      findings.push(...rule(file));
+    }
   }
   return findings;
 }
