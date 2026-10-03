@@ -1,7 +1,9 @@
 import type { Finding } from '../finding.js';
 import type { SourceFile } from '../sourceFile.js';
 
-export function dangerousHtmlRule(file: SourceFile): Finding[] {
+import type { Rule } from '../rule.js';
+
+export const dangerousHtmlRule: Rule = (file: SourceFile) => {
   const findings: Finding[] = [];
   const lines = file.content.split('\n');
 
@@ -24,4 +26,4 @@ export function dangerousHtmlRule(file: SourceFile): Finding[] {
   });
 
   return findings;
-}
+};
