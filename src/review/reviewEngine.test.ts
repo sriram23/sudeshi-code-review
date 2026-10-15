@@ -1,0 +1,265 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import type { AIProvider } from '../ai/provider.js';
+import type { Finding } from '../analyzer/finding.js';
+import type { ReviewContext } from '../context/buildContext.js';
+import type { ReviewResult } from './reviewEngine.js';
+
+describe('ReviewEngine', () => {
+  it('defines a review result', () => {
+    const result: ReviewResult = {
+      findings: [],
+      filesScanned: 0,
+      durationMs: 0,
+    };
+
+    expect(result).toEqual({
+      findings: [],
+      filesScanned: 0,
+      durationMs: 0,
+    });
+  });
+
+  it('invokes the AI provider for findings requiring AI review', async () => {
+    const finding: Finding = {
+      id: 'dangerous-html',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/Comment.tsx',
+      line: 6,
+      rule: 'dangerous-html',
+      message: 'dangerouslySetInnerHTML is used',
+      evidence: 'dangerouslySetInnerHTML',
+      requiresAIReview: true,
+    };
+
+    const sourceFile = {
+      path: 'src/Comment.tsx',
+      content: [
+        "import sanitizeHTML from 'sanitize-html';",
+        '',
+        'export function Comment({ html }) {',
+        '  const safeHtml = sanitizeHTML(html);',
+        '  return <div />;',
+        '  return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+        '}',
+      ].join('\n'),
+    };
+
+    const context: ReviewContext = {
+      finding,
+      code: [
+        'export function Comment({ html }) {',
+        '  const safeHtml = sanitizeHTML(html);',
+        '  return <div />;',
+        '  return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+        '}',
+      ].join('\n'),
+      startLine: 3,
+      endLine: 7,
+      imports: ["import sanitizeHTML from 'sanitize-html';"],
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: false,
+      severity: 'high',
+      confidence: 0.95,
+      reason: 'Unsanitized HTML may lead to XSS.',
+      recommendation: 'Sanitize the HTML before rendering it.',
+    });
+
+    const provider: AIProvider = { analyze };
+
+    const { ReviewEngine } = await import('./reviewEngine.js');
+
+    const engine = new ReviewEngine({ provider });
+
+    const result = await engine.review({
+      files: [sourceFile],
+      findings: [finding],
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(analyze).toHaveBeenCalledWith(context);
+    expect(result.findings).toEqual([
+      {
+        ...finding,
+        aiReview: {
+          valid: false,
+          severity: 'high',
+          confidence: 0.95,
+          reason: 'Unsanitized HTML may lead to XSS.',
+          recommendation: 'Sanitize the HTML before rendering it.',
+        },
+      },
+    ]);
+    expect(result.filesScanned).toBe(1);
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('does not invoke the AI provider for findings that do not require AI review', async () => {
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: "const apiKey = 'example-secret';",
+      requiresAIReview: false,
+    };
+
+    const analyze = vi.fn();
+
+    const provider: AIProvider = { analyze };
+
+    const { ReviewEngine } = await import('./reviewEngine.js');
+
+    const engine = new ReviewEngine({ provider });
+
+    const result = await engine.review({
+      files: [
+        {
+          path: 'src/config.ts',
+          content: "const apiKey = 'example-secret';",
+        },
+      ],
+      findings: [finding],
+    });
+
+    expect(analyze).not.toHaveBeenCalled();
+    expect(result.findings).toEqual([finding]);
+    expect(result.filesScanned).toBe(1);
+  });
+
+  it('records AI severity and confidence separately from the finding', async () => {
+    const finding: Finding = {
+      id: 'dangerous-html',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/Comment.tsx',
+      line: 6,
+      rule: 'dangerous-html',
+      message: 'dangerouslySetInnerHTML is used',
+      evidence: 'dangerouslySetInnerHTML',
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      severity: 'medium',
+      confidence: 0.75,
+      reason: 'The HTML appears to be sanitized.',
+      recommendation: 'Verify that sanitization occurs before rendering.',
+    });
+
+    const provider: AIProvider = { analyze };
+
+    const { ReviewEngine } = await import('./reviewEngine.js');
+
+    const engine = new ReviewEngine({ provider });
+
+    const result = await engine.review({
+      files: [
+        {
+          path: 'src/Comment.tsx',
+          content: [
+            'line 1',
+            'line 2',
+            'line 3',
+            'line 4',
+            'line 5',
+            'dangerouslySetInnerHTML',
+            'line 7',
+          ].join('\n'),
+        },
+      ],
+      findings: [finding],
+    });
+
+    expect(result.findings[0]).toMatchObject({
+      id: finding.id,
+      severity: 'high',
+      confidence: 1,
+      evidence: finding.evidence,
+      message: finding.message,
+      aiReview: {
+        valid: true,
+        severity: 'medium',
+        confidence: 0.75,
+        reason: 'The HTML appears to be sanitized.',
+        recommendation: 'Verify that sanitization occurs before rendering.',
+      },
+    });
+  });
+
+  it('preserves the finding and records an AI-identified false positive', async () => {
+    const finding: Finding = {
+      id: 'dangerous-html',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/Comment.tsx',
+      line: 6,
+      rule: 'dangerous-html',
+      message: 'dangerouslySetInnerHTML is used',
+      evidence: 'dangerouslySetInnerHTML',
+      requiresAIReview: true,
+    };
+
+    const aiResult = {
+      valid: false,
+      severity: 'low' as const,
+      confidence: 0.95,
+      reason: 'The HTML is sanitized before rendering.',
+      recommendation: 'Verify the sanitization implementation.',
+    };
+
+    const provider: AIProvider = {
+      analyze: vi.fn().mockResolvedValue(aiResult),
+    };
+
+    const { ReviewEngine } = await import('./reviewEngine.js');
+    const engine = new ReviewEngine({ provider });
+
+    const result = await engine.review({
+      files: [
+        {
+          path: finding.file,
+          content: [
+            'line 1',
+            'line 2',
+            'line 3',
+            'line 4',
+            'line 5',
+            'dangerouslySetInnerHTML',
+            'line 7',
+          ].join('\n'),
+        },
+      ],
+      findings: [finding],
+    });
+
+    expect(result.findings[0]).toMatchObject({
+      id: finding.id,
+      message: finding.message,
+      evidence: finding.evidence,
+      severity: finding.severity,
+      confidence: finding.confidence,
+      aiReview: {
+        valid: false,
+        reason: aiResult.reason,
+        recommendation: aiResult.recommendation,
+      },
+    });
+
+    // The caller's original finding must remain unchanged.
+    expect(finding).not.toHaveProperty('aiReview');
+    expect(finding.confidence).toBe(1);
+    expect(finding.severity).toBe('high');
+  });
+});
