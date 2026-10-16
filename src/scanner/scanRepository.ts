@@ -37,9 +37,8 @@ export async function scanRepository(
       }
       if (entry.isFile()) {
         const extension = path.extname(entry.name);
-        if (!SOURCE_EXTENSIONS.has(extension)) {
-          continue;
-        }
+        if (!SOURCE_EXTENSIONS.has(extension)) continue;
+        if (/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(entry.name)) continue;
         files.push(toRelativePath(repositoryPath, entryPath));
       }
     }
