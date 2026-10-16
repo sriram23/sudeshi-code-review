@@ -18,4 +18,14 @@ describe('scanRepository', () => {
       scanRepository('test-fixtures/basic/src/index.ts'),
     ).rejects.toThrow();
   });
+  it('excludes test files from the repository scan', async () => {
+    const files = await scanRepository('test-fixtures/basic');
+
+    expect(files).not.toContain('src/analyzer/rules/dangerousHtml.test.ts');
+  });
+  it('excludes test files while keeping regular source files', async () => {
+    const files = await scanRepository('test-fixtures/exclude-tests');
+
+    expect(files).toEqual(['src/App.tsx']);
+  });
 });

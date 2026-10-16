@@ -36,4 +36,32 @@ describe('dangerousHtmlRule', () => {
 
     expect(findings).toEqual([]);
   });
+  it('ignores comments and string literals containing dangerouslySetInnerHTML', () => {
+    const file = {
+      path: 'src/example.tsx',
+      content: [
+        '// dangerouslySetInnerHTML',
+        "const ruleName = 'dangerouslySetInnerHTML';",
+        '/* dangerouslySetInnerHTML is potentially unsafe */',
+      ].join('\n'),
+    };
+
+    expect(dangerousHtmlRule(file)).toHaveLength(0);
+  });
+  it('detects dangerouslySetInnerHTML in actual JSX', () => {
+    const file = {
+      path: 'src/Example.tsx',
+      content: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+    };
+
+    const findings = dangerousHtmlRule(file);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      file: 'src/Example.tsx',
+      line: 1,
+      evidence: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+    });
+  });
 });
