@@ -1,3 +1,5 @@
 #!/usr/bin/env node
 
-console.log('Sudeshi Code Review');
+import { runCLI } from './cli.js';
+
+await runCLI(process.argv.slice(2));
