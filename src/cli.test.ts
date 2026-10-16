@@ -247,4 +247,30 @@ describe('CLI', () => {
       rmSync(repositoryPath, { recursive: true, force: true });
     }
   });
+  it('writes a Markdown report without a ReviewEngine', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    const scanRepository = vi.fn().mockResolvedValue([]);
+    const analyze = vi.fn().mockReturnValue([]);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI([repositoryPath], { scanRepository, analyze });
+
+      expect(writeOutput).toHaveBeenCalledWith(
+        expect.stringContaining('# Sudeshi Code Review'),
+      );
+    } finally {
+      writeOutput.mockRestore();
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
 });

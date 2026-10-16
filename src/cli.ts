@@ -57,14 +57,14 @@ export async function runCLI(
 
   const findings = dependencies.analyze(files);
 
-  if (dependencies.reviewEngine) {
-    const result = await dependencies.reviewEngine.review({
-      files,
-      findings,
-    });
+  const result = dependencies.reviewEngine
+    ? await dependencies.reviewEngine.review({ files, findings })
+    : {
+        findings,
+        filesScanned: files.length,
+        durationMs: 0,
+      };
 
-    const report = generateMarkdownReport(result);
-
-    process.stdout.write(`${report}\n`);
-  }
+  const report = generateMarkdownReport(result);
+  process.stdout.write(`${report}\n`);
 }
