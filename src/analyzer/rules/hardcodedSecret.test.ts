@@ -143,4 +143,41 @@ describe('hardcodedSecretRule', () => {
     expect(findings[0]?.line).toBe(1);
     expect(findings[1]?.line).toBe(2);
   });
+
+  it('ignores comments containing secret-like assignments', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        "// const apiKey = 'example-secret';",
+        "/* const password = 'example-password'; */",
+        "const secret = 'actual-secret';",
+      ].join('\n'),
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'hardcoded-secret',
+      line: 3,
+      evidence: "const secret = 'actual-secret';",
+    });
+  });
+
+  it('ignores secret-like assignments inside multiline comments', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        '/*',
+        "const apiKey = 'example-secret';",
+        '*/',
+        "const password = 'actual-password';",
+      ].join('\n'),
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'hardcoded-secret',
+      line: 4,
+      evidence: "const password = 'actual-password';",
+    });
+  });
 });
