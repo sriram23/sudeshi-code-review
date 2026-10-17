@@ -21,6 +21,31 @@ type ReviewInput = {
 export class ReviewEngine {
   constructor(private readonly config: ReviewEngineConfig) {}
 
+  private redactHardcodedSecret(source: string): string {
+    return source.replace(
+      /\b(apiKey|api_key|password|secret)\s*=\s*(['"])(.*?)\2/gi,
+      (_match, name: string, quote: string) =>
+        `${name} = ${quote}{REDACTED}${quote}`,
+    );
+  }
+
+  private redactSecretValue(source: string, finding: Finding): string {
+    if (finding.rule !== 'hardcoded-secret' || !finding.evidence) {
+      return source;
+    }
+
+    const match = finding.evidence.match(
+      /\b(?:apiKey|api_key|password|secret)\s*=\s*(['"])(.*?)\1/i,
+    );
+    const secret = match?.[2];
+
+    if (!secret) {
+      return source;
+    }
+
+    return source.replaceAll(secret, '[REDACTED]');
+  }
+
   async review(input: ReviewInput): Promise<ReviewResult> {
     const startTime = performance.now();
 
@@ -37,7 +62,31 @@ export class ReviewEngine {
         continue;
       }
 
-      const context = buildContext(sourceFile, finding);
+      if (
+        finding.rule === 'hardcoded-secret' &&
+        !finding.evidence?.match(
+          /\b(?:apiKey|api_key|password|secret)\s*=\s*(['"])(.*?)\1/i,
+        )?.[2]
+      ) {
+        continue;
+      }
+
+      const safeSourceFile = {
+        ...sourceFile,
+        content: this.redactSecretValue(
+          this.redactHardcodedSecret(sourceFile.content),
+          finding,
+        ),
+      };
+
+      const safeFinding = {
+        ...finding,
+        ...(finding.evidence !== undefined && {
+          evidence: this.redactHardcodedSecret(finding.evidence),
+        }),
+      };
+
+      const context = buildContext(safeSourceFile, safeFinding);
       const aiResult = await this.config.provider.analyze({
         ...context,
         finding: { ...context.finding },

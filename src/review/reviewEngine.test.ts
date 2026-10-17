@@ -262,4 +262,162 @@ describe('ReviewEngine', () => {
     expect(finding.confidence).toBe(1);
     expect(finding.severity).toBe('high');
   });
+
+  it('does not send a hardcoded secret value to the AI provider', async () => {
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: "const apiKey = 'test-super-secret-value';",
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const { ReviewEngine } = await import('./reviewEngine.js');
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [
+        {
+          path: 'src/config.ts',
+          content: "const apiKey = 'test-super-secret-value';",
+        },
+      ],
+      findings: [finding],
+    });
+
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(
+      'test-super-secret-value',
+    );
+  });
+
+  it('redacts a hardcoded secret wherever it appears in the source', async () => {
+    const secret = 'test-super-secret-value';
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: `const apiKey = '${secret}';`,
+      requiresAIReview: true,
+    };
+
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: [
+        `const apiKey = '${secret}';`,
+        `// Example credential: ${secret}`,
+        `const copiedValue = '${secret}';`,
+      ].join('\n'),
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const { ReviewEngine } = await import('./reviewEngine.js');
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [sourceFile],
+      findings: [finding],
+    });
+
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+  });
+
+  it('does not mutate the original source file or finding during redaction', async () => {
+    const secret = 'test-super-secret-value';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: `const apiKey = '${secret}';`,
+    };
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: `const apiKey = '${secret}';`,
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const { ReviewEngine } = await import('./reviewEngine.js');
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [sourceFile],
+      findings: [finding],
+    });
+
+    expect(sourceFile.content).toContain(secret);
+    expect(finding.evidence).toContain(secret);
+  });
+
+  it('does not send source to the AI provider when a hardcoded secret cannot be extracted', async () => {
+    const secret = 'test-super-secret-value';
+
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: 'Unable to extract the secret from this evidence',
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const { ReviewEngine } = await import('./reviewEngine.js');
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [
+        {
+          path: 'src/config.ts',
+          content: `const apiKey = '${secret}';`,
+        },
+      ],
+      findings: [finding],
+    });
+
+    expect(analyze).not.toHaveBeenCalled();
+  });
 });
