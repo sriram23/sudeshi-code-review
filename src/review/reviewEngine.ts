@@ -18,26 +18,33 @@ type ReviewInput = {
   findings: Finding[];
 };
 
+const SECRET_ASSIGNMENT_PATTERN = String.raw`\b(apiKey|api_key|password|secret|clientSecret|client_secret|token)\s*=\s*(['"])(.*?)\2`;
+
+function createSecretAssignmentRegex(global = false): RegExp {
+  return new RegExp(SECRET_ASSIGNMENT_PATTERN, global ? 'g' : undefined);
+}
+
+function extractSecretValue(evidence: string | undefined): string | undefined {
+  return evidence?.match(createSecretAssignmentRegex())?.[3];
+}
+
 export class ReviewEngine {
   constructor(private readonly config: ReviewEngineConfig) {}
 
   private redactHardcodedSecret(source: string): string {
     return source.replace(
-      /\b(apiKey|api_key|password|secret)\s*=\s*(['"])(.*?)\2/gi,
+      createSecretAssignmentRegex(true),
       (_match, name: string, quote: string) =>
         `${name} = ${quote}{REDACTED}${quote}`,
     );
   }
 
   private redactSecretValue(source: string, finding: Finding): string {
-    if (finding.rule !== 'hardcoded-secret' || !finding.evidence) {
+    if (finding.rule !== 'hardcoded-secret') {
       return source;
     }
 
-    const match = finding.evidence.match(
-      /\b(?:apiKey|api_key|password|secret)\s*=\s*(['"])(.*?)\1/i,
-    );
-    const secret = match?.[2];
+    const secret = extractSecretValue(finding.evidence);
 
     if (!secret) {
       return source;
@@ -64,9 +71,7 @@ export class ReviewEngine {
 
       if (
         finding.rule === 'hardcoded-secret' &&
-        !finding.evidence?.match(
-          /\b(?:apiKey|api_key|password|secret)\s*=\s*(['"])(.*?)\1/i,
-        )?.[2]
+        !extractSecretValue(finding.evidence)
       ) {
         continue;
       }

@@ -16,7 +16,9 @@ export const hardcodedSecretRule: Rule = (file) => {
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
-      /^(apiKey|api_key|password|secret)$/i.test(node.name.text) &&
+      /^(apiKey|api_key|password|secret|clientSecret|client_secret|token)$/i.test(
+        node.name.text,
+      ) &&
       node.initializer &&
       ts.isStringLiteral(node.initializer)
     ) {

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AIProvider } from '../ai/provider.js';
 import type { Finding } from '../analyzer/finding.js';
 import type { ReviewContext } from '../context/buildContext.js';
-import type { ReviewResult } from './reviewEngine.js';
+import { type ReviewResult, ReviewEngine } from './reviewEngine.js';
 
 describe('ReviewEngine', () => {
   it('defines a review result', () => {
@@ -419,5 +419,52 @@ describe('ReviewEngine', () => {
     });
 
     expect(analyze).not.toHaveBeenCalled();
+  });
+  it('redacts clientSecret values before sending source to the AI provider', async () => {
+    const secret = 'super-sensitive-client-secret';
+
+    const files = [
+      {
+        path: 'config.ts',
+        content: `const clientSecret = '${secret}';`,
+      },
+    ];
+
+    const findings: Finding[] = [
+      {
+        id: 'hardcoded-secret',
+        category: 'security',
+        severity: 'high',
+        confidence: 1,
+        file: 'config.ts',
+        line: 1,
+        rule: 'hardcoded-secret',
+        message: 'Potential hardcoded secret detected',
+        evidence: `const clientSecret = '${secret}';`,
+        requiresAIReview: true,
+      },
+    ];
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      severity: 'high',
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const engine = new ReviewEngine({
+      provider: { analyze },
+    });
+
+    await engine.review({ files, findings });
+
+    expect(analyze).toHaveBeenCalledOnce();
+
+    const call = analyze.mock.calls[0];
+    expect(call).toBeDefined();
+    const request = call![0];
+
+    expect(JSON.stringify(request)).not.toContain(secret);
   });
 });

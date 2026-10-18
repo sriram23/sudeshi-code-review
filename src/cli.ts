@@ -9,6 +9,8 @@ import { dangerousHtmlRule } from './analyzer/rules/dangerousHtml.js';
 import { hardcodedSecretRule } from './analyzer/rules/hardcodedSecret.js';
 import type { ReviewEngine as ReviewEngineType } from './review/reviewEngine.js';
 import { generateMarkdownReport } from './reporting/markdownReporter.js';
+import { SarvamProvider } from './ai/sarvamProvider.js';
+import { ReviewEngine } from './review/reviewEngine.js';
 
 type CLIDependencies = {
   scanRepository: typeof defaultScanRepository;
@@ -57,8 +59,18 @@ export async function runCLI(
 
   const findings = dependencies.analyze(files);
 
-  const result = dependencies.reviewEngine
-    ? await dependencies.reviewEngine.review({ files, findings })
+  const apiKey = process.env.SARVAM_API_KEY;
+
+  const reviewEngine =
+    dependencies.reviewEngine ??
+    (apiKey
+      ? new ReviewEngine({
+          provider: new SarvamProvider({ apiKey }),
+        })
+      : undefined);
+
+  const result = reviewEngine
+    ? await reviewEngine.review({ files, findings })
     : {
         findings,
         filesScanned: files.length,
