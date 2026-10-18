@@ -273,4 +273,193 @@ describe('CLI', () => {
       rmSync(repositoryPath, { recursive: true, force: true });
     }
   });
+
+  it('uses AI review when SARVAM_API_KEY is configured', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    const originalApiKey = process.env.SARVAM_API_KEY;
+    process.env.SARVAM_API_KEY = 'test-api-key';
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      const review = vi.fn().mockResolvedValue({
+        findings: [],
+        filesScanned: 0,
+        durationMs: 1,
+      });
+
+      await runCLI([repositoryPath], {
+        scanRepository: vi.fn().mockResolvedValue([]),
+        analyze: vi.fn().mockReturnValue([]),
+        reviewEngine: { review },
+      });
+
+      expect(review).toHaveBeenCalled();
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.SARVAM_API_KEY;
+      } else {
+        process.env.SARVAM_API_KEY = originalApiKey;
+      }
+
+      writeOutput.mockRestore();
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
+
+  it('uses Sarvam AI when SARVAM_API_KEY is configured', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    writeFileSync(
+      join(repositoryPath, 'config.ts'),
+      "const apiKey = 'test-source-secret';",
+    );
+
+    const originalApiKey = process.env.SARVAM_API_KEY;
+    process.env.SARVAM_API_KEY = 'test-sarvam-key';
+
+    const response = {
+      valid: true,
+      severity: 'low',
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        [
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  content: JSON.stringify(response),
+                },
+              },
+            ],
+          })}`,
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/event-stream',
+          },
+        },
+      ),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI([repositoryPath]);
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+      expect(new Headers(options.headers).get('api-subscription-key')).toBe(
+        'test-sarvam-key',
+      );
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.SARVAM_API_KEY;
+      } else {
+        process.env.SARVAM_API_KEY = originalApiKey;
+      }
+
+      vi.unstubAllGlobals();
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
+  it('does not call Sarvam AI when SARVAM_API_KEY is absent', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+
+    const originalApiKey = process.env.SARVAM_API_KEY;
+    delete process.env.SARVAM_API_KEY;
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      writeFileSync(
+        join(repositoryPath, 'config.ts'),
+        "const apiKey = 'test-source-secret';",
+      );
+
+      const { runCLI } = await import('./cli.js');
+      await runCLI([repositoryPath]);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.SARVAM_API_KEY;
+      } else {
+        process.env.SARVAM_API_KEY = originalApiKey;
+      }
+
+      vi.unstubAllGlobals();
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
+  it('propagates Sarvam HTTP errors when AI review is configured', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+
+    const originalApiKey = process.env.SARVAM_API_KEY;
+    process.env.SARVAM_API_KEY = 'test-sarvam-key';
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('Unauthorized', {
+        status: 401,
+        statusText: 'Unauthorized',
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      writeFileSync(
+        join(repositoryPath, 'config.ts'),
+        "const apiKey = 'test-source-secret';",
+      );
+
+      const { runCLI } = await import('./cli.js');
+
+      await expect(runCLI([repositoryPath])).rejects.toThrow();
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.SARVAM_API_KEY;
+      } else {
+        process.env.SARVAM_API_KEY = originalApiKey;
+      }
+
+      vi.unstubAllGlobals();
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
 });
