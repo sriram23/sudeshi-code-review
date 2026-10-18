@@ -250,4 +250,37 @@ describe('analyze', () => {
       'dangerous-html',
     ]);
   });
+
+  it('evaluates clean and vulnerable code samples together', () => {
+    const findings = analyze(
+      [
+        {
+          path: 'src/SafeComponent.tsx',
+          content: `
+          export function SafeComponent() {
+            return <div>Hello world</div>;
+          }
+        `,
+        },
+        {
+          path: 'src/UnsafeComponent.tsx',
+          content: `
+          export function UnsafeComponent({ html }) {
+            return <div dangerouslySetInnerHTML={{ __html: html }} />;
+          }
+        `,
+        },
+        {
+          path: 'src/config.ts',
+          content: "const apiKey = 'example-hardcoded-secret-value';",
+        },
+      ],
+      [hardcodedSecretRule, dangerousHtmlRule],
+    );
+
+    expect(findings.map(({ file, rule }) => ({ file, rule }))).toEqual([
+      { file: 'src/UnsafeComponent.tsx', rule: 'dangerous-html' },
+      { file: 'src/config.ts', rule: 'hardcoded-secret' },
+    ]);
+  });
 });
