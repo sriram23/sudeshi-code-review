@@ -64,4 +64,137 @@ describe('dangerousHtmlRule', () => {
       evidence: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
     });
   });
+  it('does not flag static JSON-LD structured data', () => {
+    const content = `
+    export function StructuredData() {
+      const data = {
+        '@context': 'https://schema.org',
+        '@type': 'WebApplication',
+        name: 'Sudeshi AI Chat',
+        url: 'https://sudeshi-ai-chat.vercel.app/',
+        applicationCategory: 'AIApplication',
+        operatingSystem: 'Web',
+        description:
+          'A multilingual AI chat assistant for natural conversations across Indian languages.',
+      };
+
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(0);
+  });
+  it('flags JSON-LD containing dynamically supplied content', () => {
+    const content = `
+    export function StructuredData({ description }) {
+      const data = {
+        '@type': 'WebApplication',
+        description,
+      };
+
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      severity: 'high',
+    });
+  });
+  it('flags dangerouslySetInnerHTML with a static value on a non-JSON-LD element', () => {
+    const findings = dangerousHtmlRule({
+      path: 'src/Example.tsx',
+      content: `
+      export function Example() {
+        return <div dangerouslySetInnerHTML={{ __html: '<p>Hello</p>' }} />;
+      }
+    `,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      severity: 'high',
+    });
+  });
+
+  it('flags JSON-LD containing a script-closing sequence', () => {
+    const content = `
+    const data = {
+      '@type': 'WebApplication',
+      description: '</script><script>alert(1)</script>',
+    };
+
+    export function StructuredData() {
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      severity: 'high',
+    });
+  });
+
+  it('does not exempt JSON-LD when its data comes from a dynamic parameter', () => {
+    const content = `
+    function anotherComponent() {
+      const data = {
+        name: 'Static data',
+      };
+    }
+
+    export function StructuredData({ data }) {
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      severity: 'high',
+    });
+  });
 });
