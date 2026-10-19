@@ -18,7 +18,8 @@ describe('dangerousHtmlRule', () => {
         file: 'src/Comment.tsx',
         line: 1,
         rule: 'dangerous-html',
-        message: 'dangerouslySetInnerHTML is used',
+        message:
+          'dangerouslySetInnerHTML can introduce HTML injection when used with untrusted content. Prefer rendering content as React text, or sanitize HTML before inserting it into the DOM.',
         evidence: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
         requiresAIReview: true,
       },
@@ -322,5 +323,19 @@ describe('dangerousHtmlRule', () => {
       rule: 'dangerous-html',
       severity: 'high',
     });
+  });
+  it('provides actionable guidance for unsafe HTML rendering', () => {
+    const findings = dangerousHtmlRule({
+      path: 'UnsafePreview.tsx',
+      content: `
+      export function UnsafePreview({ html }: { html: string }) {
+        return <div dangerouslySetInnerHTML={{ __html: html }} />;
+      }
+    `,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].message).toContain('dangerouslySetInnerHTML');
+    expect(findings[0].message).toContain('sanitize');
   });
 });

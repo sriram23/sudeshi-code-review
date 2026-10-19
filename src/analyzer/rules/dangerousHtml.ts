@@ -188,7 +188,8 @@ export const dangerousHtmlRule: Rule = (file: SourceFile) => {
         file: file.path,
         line: line + 1,
         rule: 'dangerous-html',
-        message: 'dangerouslySetInnerHTML is used',
+        message:
+          'dangerouslySetInnerHTML can introduce HTML injection when used with untrusted content. Prefer rendering content as React text, or sanitize HTML before inserting it into the DOM.',
         evidence: lines[line]?.trim() ?? '',
         requiresAIReview: true,
       });

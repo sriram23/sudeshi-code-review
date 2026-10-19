@@ -186,4 +186,143 @@ describe('markdownReporter', () => {
     expect(report).toContain('Total findings: 0');
     expect(report).toContain('No findings detected.');
   });
+  it('includes evidence for a finding when available', async () => {
+    const { generateMarkdownReport } = await import('./markdownReporter.js');
+
+    const report = generateMarkdownReport({
+      filesScanned: 1,
+      durationMs: 100,
+      findings: [
+        {
+          id: 'dangerous-html',
+          category: 'security',
+          severity: 'high',
+          confidence: 1,
+          file: 'src/components/UnsafePreview.tsx',
+          line: 7,
+          rule: 'dangerous-html',
+          message: 'dangerouslySetInnerHTML is used',
+          evidence: 'dangerouslySetInnerHTML={{ __html: htmlFromUser }}',
+          requiresAIReview: true,
+        },
+      ],
+    });
+
+    expect(report).toContain('**Evidence:**');
+    expect(report).toContain(
+      'dangerouslySetInnerHTML={{ __html: htmlFromUser }}',
+    );
+  });
+  it('includes finding confidence in the Markdown report', async () => {
+    const { generateMarkdownReport } = await import('./markdownReporter.js');
+
+    const report = generateMarkdownReport({
+      filesScanned: 1,
+      durationMs: 100,
+      findings: [
+        {
+          id: 'dangerous-html',
+          category: 'security',
+          severity: 'high',
+          confidence: 0.85,
+          file: 'src/components/UnsafePreview.tsx',
+          line: 7,
+          rule: 'dangerous-html',
+          message: 'Potentially unsafe HTML rendering.',
+          requiresAIReview: true,
+        },
+      ],
+    });
+
+    expect(report).toContain('**Rule confidence:** 85%');
+  });
+  it('formats finding details without accidental indentation or punctuation', async () => {
+    const { generateMarkdownReport } = await import('./markdownReporter.js');
+
+    const report = generateMarkdownReport({
+      filesScanned: 1,
+      durationMs: 100,
+      findings: [
+        {
+          id: 'dangerous-html',
+          category: 'security',
+          severity: 'high',
+          confidence: 0.85,
+          file: 'src/UnsafePreview.tsx',
+          line: 7,
+          rule: 'dangerous-html',
+          message: 'Potentially unsafe HTML rendering.',
+          evidence: 'dangerouslySetInnerHTML={{ __html: html }}',
+          requiresAIReview: true,
+        },
+      ],
+    });
+
+    expect(report).toContain(
+      '### HIGH - src/UnsafePreview.tsx:7\n\nPotentially unsafe HTML rendering.',
+    );
+    expect(report).not.toContain('rendering.;');
+    expect(report).toContain('**Rule confidence:** 85%');
+    expect(report).toContain(
+      '```tsx\ndangerouslySetInnerHTML={{ __html: html }}\n```',
+    );
+  });
+  it('labels finding confidence as rule confidence in the Markdown report', async () => {
+    const { generateMarkdownReport } = await import('./markdownReporter.js');
+
+    const report = generateMarkdownReport({
+      filesScanned: 1,
+      durationMs: 100,
+      findings: [
+        {
+          id: 'dangerous-html',
+          category: 'security',
+          severity: 'high',
+          confidence: 0.85,
+          file: 'src/components/UnsafePreview.tsx',
+          line: 7,
+          rule: 'dangerous-html',
+          message: 'Potentially unsafe HTML rendering.',
+          requiresAIReview: true,
+        },
+      ],
+    });
+
+    expect(report).toContain('**Rule confidence:** 85%');
+    expect(report).not.toContain('**Confidence:** 85%');
+  });
+  it('includes AI review confidence in the Markdown report', async () => {
+    const { generateMarkdownReport } = await import('./markdownReporter.js');
+
+    const report = generateMarkdownReport({
+      filesScanned: 1,
+      durationMs: 100,
+      findings: [
+        {
+          id: 'dangerous-html',
+          category: 'security',
+          severity: 'high',
+          confidence: 1,
+          file: 'src/Comment.tsx',
+          line: 6,
+          rule: 'dangerous-html',
+          message: 'Potentially unsafe HTML rendering.',
+          evidence: 'dangerouslySetInnerHTML',
+          requiresAIReview: true,
+          aiReview: {
+            valid: false,
+            severity: 'low',
+            confidence: 0.95,
+            reason: 'The HTML is sanitized before rendering.',
+            recommendation: 'Verify sanitization is consistently applied.',
+          },
+        },
+      ],
+    });
+
+    expect(report).toContain('**Rule confidence:** 100%');
+    expect(report).toContain('**AI confidence:** 95%');
+    expect(report).toContain('The HTML is sanitized before rendering.');
+    expect(report).toContain('Verify sanitization is consistently applied.');
+  });
 });
