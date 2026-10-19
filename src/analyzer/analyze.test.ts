@@ -41,7 +41,8 @@ describe('analyze', () => {
         file: 'src/App.tsx',
         line: 3,
         rule: 'dangerous-html',
-        message: 'dangerouslySetInnerHTML is used',
+        message:
+          'dangerouslySetInnerHTML can introduce HTML injection when used with untrusted content. Prefer rendering content as React text, or sanitize HTML before inserting it into the DOM.',
         evidence:
           'return <div dangerouslySetInnerHTML={{ __html: comment }} />',
         requiresAIReview: true,
@@ -76,7 +77,8 @@ describe('analyze', () => {
       file: 'src/Comment.tsx',
       line: 3,
       rule: 'dangerous-html',
-      message: 'dangerouslySetInnerHTML is used',
+      message:
+        'dangerouslySetInnerHTML can introduce HTML injection when used with untrusted content. Prefer rendering content as React text, or sanitize HTML before inserting it into the DOM.',
       evidence: 'return <div dangerouslySetInnerHTML={{ __html: comment }} />',
       requiresAIReview: true,
     });
@@ -89,7 +91,8 @@ describe('analyze', () => {
       file: 'src/Comment.tsx',
       line: 7,
       rule: 'dangerous-html',
-      message: 'dangerouslySetInnerHTML is used',
+      message:
+        'dangerouslySetInnerHTML can introduce HTML injection when used with untrusted content. Prefer rendering content as React text, or sanitize HTML before inserting it into the DOM.',
       evidence: 'return <div dangerouslySetInnerHTML={{ __html: comment }} />',
       requiresAIReview: true,
     });
@@ -119,7 +122,8 @@ describe('analyze', () => {
         file: 'src/Comment.tsx',
         line: 1,
         rule: 'dangerous-html',
-        message: 'dangerouslySetInnerHTML is used',
+        message:
+          'dangerouslySetInnerHTML can introduce HTML injection when used with untrusted content. Prefer rendering content as React text, or sanitize HTML before inserting it into the DOM.',
         evidence: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
         requiresAIReview: true,
       },
@@ -131,7 +135,8 @@ describe('analyze', () => {
         file: 'src/Post.tsx',
         line: 1,
         rule: 'dangerous-html',
-        message: 'dangerouslySetInnerHTML is used',
+        message:
+          'dangerouslySetInnerHTML can introduce HTML injection when used with untrusted content. Prefer rendering content as React text, or sanitize HTML before inserting it into the DOM.',
         evidence:
           'return <section dangerouslySetInnerHTML={{ __html: content }} />;',
         requiresAIReview: true,
@@ -164,7 +169,8 @@ describe('analyze', () => {
         file: 'src/Comment.tsx',
         line: 4,
         rule: 'dangerous-html',
-        message: 'dangerouslySetInnerHTML is used',
+        message:
+          'dangerouslySetInnerHTML can introduce HTML injection when used with untrusted content. Prefer rendering content as React text, or sanitize HTML before inserting it into the DOM.',
         evidence: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
         requiresAIReview: true,
       },
