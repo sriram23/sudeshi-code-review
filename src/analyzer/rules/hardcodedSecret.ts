@@ -13,12 +13,13 @@ export const hardcodedSecretRule: Rule = (file) => {
   );
 
   function visit(node: ts.Node): void {
+    const secretNamePattern =
+      /^(apiKey|api_key|paymentApiKey|accessToken|access_token|internalToken|internal_token|databaseUrl|database_url|password|secret|clientSecret|client_secret|token)$/i;
+
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
-      /^(apiKey|api_key|password|secret|clientSecret|client_secret|token)$/i.test(
-        node.name.text,
-      ) &&
+      secretNamePattern.test(node.name.text) &&
       node.initializer &&
       ts.isStringLiteral(node.initializer)
     ) {
@@ -27,7 +28,47 @@ export const hardcodedSecretRule: Rule = (file) => {
       );
       const value = node.initializer.text;
 
-      if (!value) return;
+      if (value) {
+        findings.push({
+          id: 'hardcoded-secret',
+          category: 'security',
+          severity: 'high',
+          confidence: 1,
+          file: file.path,
+          line: line + 1,
+          rule: 'hardcoded-secret',
+          message: 'A hardcoded secret may be present',
+          evidence: file.content.split('\n')[line]?.trim() ?? '',
+          requiresAIReview: true,
+        });
+      }
+    }
+
+    if (
+      ts.isPropertyAssignment(node) &&
+      ts.isIdentifier(node.name) &&
+      secretNamePattern.test(node.name.text) &&
+      ts.isStringLiteral(node.initializer)
+    ) {
+      const propertyName = node.name.text;
+      const value = node.initializer.text;
+
+      if (!value) {
+        ts.forEachChild(node, visit);
+        return;
+      }
+
+      if (
+        /^(databaseUrl|database_url)$/i.test(propertyName) &&
+        !/^[a-z][a-z0-9+.-]*:\/\/[^/@:]+:[^/@]+@/i.test(value)
+      ) {
+        ts.forEachChild(node, visit);
+        return;
+      }
+
+      const { line } = sourceFile.getLineAndCharacterOfPosition(
+        node.getStart(sourceFile),
+      );
 
       findings.push({
         id: 'hardcoded-secret',

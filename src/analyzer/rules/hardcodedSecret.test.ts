@@ -180,4 +180,114 @@ describe('hardcodedSecretRule', () => {
       evidence: "const password = 'actual-password';",
     });
   });
+  it('detects a hardcoded access token', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: `const accessToken = 'my-access-token-value';`,
+    });
+
+    expect(findings).toEqual([
+      {
+        id: 'hardcoded-secret',
+        category: 'security',
+        severity: 'high',
+        confidence: 1,
+        file: 'src/config.ts',
+        line: 1,
+        rule: 'hardcoded-secret',
+        message: 'A hardcoded secret may be present',
+        evidence: `const accessToken = 'my-access-token-value';`,
+        requiresAIReview: true,
+      },
+    ]);
+  });
+  it('detects a hardcoded API key in an object property', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        'export const config = {',
+        '  paymentApiKey: "sk_test_FAKE_DEMO_KEY_DO_NOT_USE_123456789",',
+        '};',
+      ].join('\n'),
+    });
+
+    expect(findings).toEqual([
+      {
+        id: 'hardcoded-secret',
+        category: 'security',
+        severity: 'high',
+        confidence: 1,
+        file: 'src/config.ts',
+        line: 2,
+        rule: 'hardcoded-secret',
+        message: 'A hardcoded secret may be present',
+        evidence:
+          'paymentApiKey: "sk_test_FAKE_DEMO_KEY_DO_NOT_USE_123456789",',
+        requiresAIReview: true,
+      },
+    ]);
+  });
+  it('detects a hardcoded token in an object property', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        'export const config = {',
+        '  internalToken: "demo_internal_token_not_a_real_secret",',
+        '};',
+      ].join('\n'),
+    });
+
+    expect(findings).toEqual([
+      {
+        id: 'hardcoded-secret',
+        category: 'security',
+        severity: 'high',
+        confidence: 1,
+        file: 'src/config.ts',
+        line: 2,
+        rule: 'hardcoded-secret',
+        message: 'A hardcoded secret may be present',
+        evidence: 'internalToken: "demo_internal_token_not_a_real_secret",',
+        requiresAIReview: true,
+      },
+    ]);
+  });
+  it('detects credentials embedded in a database URL property', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        'export const config = {',
+        '  databaseUrl: "postgres://demo_user:demo_password@localhost:5432/demo_db",',
+        '};',
+      ].join('\n'),
+    });
+
+    expect(findings).toEqual([
+      {
+        id: 'hardcoded-secret',
+        category: 'security',
+        severity: 'high',
+        confidence: 1,
+        file: 'src/config.ts',
+        line: 2,
+        rule: 'hardcoded-secret',
+        message: 'A hardcoded secret may be present',
+        evidence:
+          'databaseUrl: "postgres://demo_user:demo_password@localhost:5432/demo_db",',
+        requiresAIReview: true,
+      },
+    ]);
+  });
+  it('ignores database URLs without embedded credentials', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        'export const config = {',
+        '  databaseUrl: "postgres://localhost:5432/demo_db",',
+        '};',
+      ].join('\n'),
+    });
+
+    expect(findings).toEqual([]);
+  });
 });
