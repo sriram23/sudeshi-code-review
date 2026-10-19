@@ -1,8 +1,10 @@
+
 import { describe, expect, it } from 'vitest';
 
 import { analyze } from '../analyze.js';
 import { dangerousHtmlRule } from '../rules/dangerousHtml.js';
 import { hardcodedSecretRule } from '../rules/hardcodedSecret.js';
+import { unsafeLinkRule } from '../rules/unsafeLink.js';
 import type { SourceFile } from '../sourceFile.js';
 
 type EvaluationCase = {
@@ -124,11 +126,28 @@ const evaluationCases: EvaluationCase[] = [
       { file: 'src/StructuredData.tsx', rule: 'dangerous-html' },
     ],
   },
+  {
+    name: 'JavaScript URL in a link',
+    files: [
+      {
+        path: 'src/UnsafeLink.tsx',
+        content:
+          'return <a href="javascript:alert(1)">Open destination</a>;',
+      },
+    ],
+    expectedFindings: [
+      { file: 'src/UnsafeLink.tsx', rule: 'unsafe-link' },
+    ],
+  },
 ];
 
 describe('analyzer evaluation suite', () => {
   it.each(evaluationCases)('evaluates $name', ({ files, expectedFindings }) => {
-    const findings = analyze(files, [hardcodedSecretRule, dangerousHtmlRule]);
+    const findings = analyze(files, [
+      hardcodedSecretRule,
+      dangerousHtmlRule,
+      unsafeLinkRule,
+    ]);
 
     expect(findings.map(({ file, rule }) => ({ file, rule }))).toEqual(
       expectedFindings,
