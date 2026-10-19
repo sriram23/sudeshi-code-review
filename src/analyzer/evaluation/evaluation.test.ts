@@ -1,4 +1,3 @@
-
 import { describe, expect, it } from 'vitest';
 
 import { analyze } from '../analyze.js';
@@ -131,13 +130,10 @@ const evaluationCases: EvaluationCase[] = [
     files: [
       {
         path: 'src/UnsafeLink.tsx',
-        content:
-          'return <a href="javascript:alert(1)">Open destination</a>;',
+        content: 'return <a href="javascript:alert(1)">Open destination</a>;',
       },
     ],
-    expectedFindings: [
-      { file: 'src/UnsafeLink.tsx', rule: 'unsafe-link' },
-    ],
+    expectedFindings: [{ file: 'src/UnsafeLink.tsx', rule: 'unsafe-link' }],
   },
 ];
 

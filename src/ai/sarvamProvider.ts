@@ -11,12 +11,14 @@ type SarvamStreamChunk = {
     delta?: {
       content?: string | null;
     };
+    finish_reason?: string | null;
   }[];
 };
 
 type ParsedSSEEvent = {
   content: string;
   done: boolean;
+  finishReason?: string | undefined;
 };
 
 const SARVAM_API_URL = 'https://api.sarvam.ai/v1/chat/completions';
@@ -46,6 +48,7 @@ Rules:
 
 function parseSSEEvent(event: string): ParsedSSEEvent {
   let content = '';
+  let finishReason: string | undefined;
 
   for (const line of event.split('\n')) {
     const trimmed = line.trim();
@@ -57,7 +60,7 @@ function parseSSEEvent(event: string): ParsedSSEEvent {
     const data = trimmed.slice('data:'.length).trim();
 
     if (data === '[DONE]') {
-      return { content, done: true };
+      return { content, done: true, finishReason };
     }
 
     if (!data) {
@@ -73,9 +76,15 @@ function parseSSEEvent(event: string): ParsedSSEEvent {
     }
 
     content += chunk.choices?.[0]?.delta?.content ?? '';
+
+    const reason = chunk.choices?.[0]?.finish_reason;
+
+    if (reason) {
+      finishReason = reason;
+    }
   }
 
-  return { content, done: false };
+  return { content, done: false, finishReason };
 }
 
 function isAIResult(value: unknown): value is AIResult {
@@ -115,6 +124,7 @@ export class SarvamProvider implements AIProvider {
         stream: true,
         temperature: 0,
         max_tokens: 500,
+        reasoning_effort: null,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
@@ -139,6 +149,7 @@ export class SarvamProvider implements AIProvider {
     let buffer = '';
     let content = '';
     let doneReceived = false;
+    let finishReason: string | undefined;
 
     try {
       while (!doneReceived) {
@@ -150,6 +161,7 @@ export class SarvamProvider implements AIProvider {
           if (buffer.trim()) {
             const parsed = parseSSEEvent(buffer);
             content += parsed.content;
+            finishReason = parsed.finishReason ?? finishReason;
             doneReceived = parsed.done;
           }
 
@@ -164,6 +176,7 @@ export class SarvamProvider implements AIProvider {
         for (const event of events) {
           const parsed = parseSSEEvent(event);
           content += parsed.content;
+          finishReason = parsed.finishReason ?? finishReason;
 
           if (parsed.done) {
             doneReceived = true;
@@ -183,6 +196,12 @@ export class SarvamProvider implements AIProvider {
 
     if (!doneReceived) {
       throw new Error('Sarvam SSE stream ended without a [DONE] marker');
+    }
+
+    if (finishReason === 'length') {
+      throw new Error(
+        'Sarvam response was truncated because it reached the output token limit',
+      );
     }
 
     let result: unknown;

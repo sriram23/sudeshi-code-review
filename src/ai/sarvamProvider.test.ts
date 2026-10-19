@@ -575,4 +575,194 @@ describe('sarvamProvider', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('throws when Sarvam returns invalid JSON for the review result', async () => {
+    const { SarvamProvider } = await import('./sarvamProvider.js');
+
+    const ssePayload = [
+      `data: ${JSON.stringify({
+        choices: [
+          {
+            delta: {
+              content: '{"valid": true, "severity": "high"',
+            },
+          },
+        ],
+      })}`,
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(ssePayload, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+        },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const provider = new SarvamProvider({
+        apiKey: 'test-api-key',
+      });
+
+      await expect(
+        provider.analyze({
+          finding: {
+            id: 'dangerous-html',
+            category: 'security',
+            severity: 'high',
+            confidence: 1,
+            file: 'src/Comment.tsx',
+            line: 6,
+            rule: 'dangerous-html',
+            message: 'dangerouslySetInnerHTML is used',
+            evidence: 'dangerouslySetInnerHTML',
+            requiresAIReview: true,
+          },
+          code: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+          startLine: 6,
+          endLine: 6,
+          imports: [],
+        }),
+      ).rejects.toThrow('Sarvam returned invalid JSON for the review result');
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports when Sarvam truncates the review result at the output token limit', async () => {
+    const { SarvamProvider } = await import('./sarvamProvider.js');
+
+    const ssePayload = [
+      `data: ${JSON.stringify({
+        choices: [
+          {
+            delta: {
+              content: '{"valid": true, "severity": "high"',
+            },
+            finish_reason: 'length',
+          },
+        ],
+      })}`,
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(ssePayload, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+        },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const provider = new SarvamProvider({
+        apiKey: 'test-api-key',
+      });
+
+      await expect(
+        provider.analyze({
+          finding: {
+            id: 'dangerous-html',
+            category: 'security',
+            severity: 'high',
+            confidence: 1,
+            file: 'src/Comment.tsx',
+            line: 6,
+            rule: 'dangerous-html',
+            message: 'dangerouslySetInnerHTML is used',
+            evidence: 'dangerouslySetInnerHTML',
+            requiresAIReview: true,
+          },
+          code: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+          startLine: 6,
+          endLine: 6,
+          imports: [],
+        }),
+      ).rejects.toThrow(
+        'Sarvam response was truncated because it reached the output token limit',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('disables reasoning to reserve output tokens for the review result', async () => {
+    const { SarvamProvider } = await import('./sarvamProvider.js');
+
+    const expectedResult = {
+      valid: true,
+      severity: 'high',
+      confidence: 0.95,
+      reason: 'The code contains a potential security issue.',
+      recommendation: 'Validate and sanitize untrusted input.',
+    };
+
+    const ssePayload = [
+      `data: ${JSON.stringify({
+        choices: [
+          {
+            delta: { content: JSON.stringify(expectedResult) },
+            finish_reason: 'stop',
+          },
+        ],
+      })}`,
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(ssePayload, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const provider = new SarvamProvider({ apiKey: 'test-api-key' });
+
+      const result = await provider.analyze({
+        finding: {
+          id: 'dangerous-html',
+          category: 'security',
+          severity: 'high',
+          confidence: 1,
+          file: 'src/Comment.tsx',
+          line: 6,
+          rule: 'dangerous-html',
+          message: 'dangerouslySetInnerHTML is used',
+          evidence: 'dangerouslySetInnerHTML',
+          requiresAIReview: true,
+        },
+        code: 'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+        startLine: 6,
+        endLine: 6,
+        imports: [],
+      });
+
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string);
+
+      expect(body.reasoning_effort).toBeNull();
+      expect(body.max_tokens).toBe(500);
+      expect(result).toEqual(expectedResult);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
