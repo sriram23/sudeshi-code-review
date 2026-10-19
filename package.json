@@ -1,7 +1,7 @@
 {
   "name": "sudeshi-code-review",
   "version": "0.1.0",
-  "description": "",
+  "description": "A TypeScript and React code review CLI with security rules and optional Sarvam AI analysis.",
   "homepage": "https://github.com/sriram23/sudeshi-code-review#readme",
   "bugs": {
     "url": "https://github.com/sriram23/sudeshi-code-review/issues"
@@ -11,15 +11,18 @@
     "url": "git+https://github.com/sriram23/sudeshi-code-review.git"
   },
   "license": "MIT",
-  "author": "Sriram",
+  "author": "Sriram B",
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "eslint",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:watch": "vitest",
+    "format:check": "prettier --check .",
+    "prepack": "npm run build"
   },
   "files": [
     "dist"
@@ -39,5 +42,8 @@
   },
   "bin": {
     "sudeshi-code-review": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
