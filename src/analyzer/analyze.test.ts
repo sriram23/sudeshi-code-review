@@ -3,6 +3,7 @@ import { analyze } from './analyze.js';
 import type { Rule } from './rule.js';
 import { dangerousHtmlRule } from './rules/dangerousHtml.js';
 import { hardcodedSecretRule } from './rules/hardcodedSecret.js';
+import { unsafeLinkRule } from './rules/unsafeLink.js';
 
 describe('analyze', () => {
   it('returns no findings for clean source code', () => {
@@ -288,5 +289,26 @@ describe('analyze', () => {
       { file: 'src/UnsafeComponent.tsx', rule: 'dangerous-html' },
       { file: 'src/config.ts', rule: 'hardcoded-secret' },
     ]);
+  });
+  it('detects unsafe links when the rule is included in the analyzer', () => {
+    const findings = analyze(
+      [
+        {
+          path: 'src/components/UnsafeLink.tsx',
+          content: 'return <a href="javascript:alert(1)">Open destination</a>;',
+        },
+      ],
+      [unsafeLinkRule],
+    );
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      id: 'unsafe-link',
+      category: 'security',
+      severity: 'high',
+      file: 'src/components/UnsafeLink.tsx',
+      line: 1,
+      rule: 'unsafe-link',
+    });
   });
 });

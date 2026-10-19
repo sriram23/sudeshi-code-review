@@ -7,6 +7,7 @@ import type { SourceFile } from './analyzer/sourceFile.js';
 import { analyze as defaultAnalyze } from './analyzer/analyze.js';
 import { dangerousHtmlRule } from './analyzer/rules/dangerousHtml.js';
 import { hardcodedSecretRule } from './analyzer/rules/hardcodedSecret.js';
+import { unsafeLinkRule } from './analyzer/rules/unsafeLink.js';
 import type { ReviewEngine as ReviewEngineType } from './review/reviewEngine.js';
 import { generateMarkdownReport } from './reporting/markdownReporter.js';
 import { SarvamProvider } from './ai/sarvamProvider.js';
@@ -23,7 +24,11 @@ export async function runCLI(
   dependencies: CLIDependencies = {
     scanRepository: defaultScanRepository,
     analyze: (files) =>
-      defaultAnalyze(files, [dangerousHtmlRule, hardcodedSecretRule]),
+      defaultAnalyze(files, [
+        dangerousHtmlRule,
+        hardcodedSecretRule,
+        unsafeLinkRule,
+      ]),
   },
 ): Promise<void> {
   const repositoryPath = args[0];
