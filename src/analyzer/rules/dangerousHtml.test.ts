@@ -197,4 +197,130 @@ describe('dangerousHtmlRule', () => {
       severity: 'high',
     });
   });
+
+  it('does not exempt JSON-LD when a nested scope shadows static data', () => {
+    const content = `
+    export function StructuredData() {
+      const data = {
+        name: 'Static data',
+      };
+
+      function render({ data }) {
+        return (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+          />
+        );
+      }
+
+      return render({ data: getDynamicData() });
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      severity: 'high',
+    });
+  });
+
+  it('does not exempt JSON-LD when a nested block shadows static data', () => {
+    const content = `
+    export function StructuredData() {
+      const data = {
+        name: 'Static data',
+      };
+
+      {
+        const data = getDynamicData();
+
+        return (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+          />
+        );
+      }
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      severity: 'high',
+    });
+  });
+  it('does not exempt JSON-LD when a nested function shadows static data', () => {
+    const content = `
+    export function StructuredData() {
+      const data = {
+        name: 'Static data',
+      };
+
+      function render(data: unknown) {
+        return (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+          />
+        );
+      }
+
+      return render(getDynamicData());
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      severity: 'high',
+    });
+  });
+  it('does not exempt JSON-LD when a nested block shadows static data', () => {
+    const content = `
+    export function StructuredData() {
+      const data = {
+        name: 'Static data',
+      };
+
+      {
+        const data = getDynamicData();
+
+        return (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+          />
+        );
+      }
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      severity: 'high',
+    });
+  });
 });
