@@ -1,4 +1,3 @@
-
 import ts from 'typescript';
 import type { Finding } from '../finding.js';
 import type { Rule } from '../rule.js';
@@ -41,9 +40,7 @@ export const unsafeLinkRule: Rule = (file) => {
       let isDangerous = false;
 
       if (ts.isStringLiteral(node.initializer)) {
-        isDangerous = /^\s*javascript\s*:/i.test(
-          node.initializer.text,
-        );
+        isDangerous = /^\s*javascript\s*:/i.test(node.initializer.text);
       } else if (ts.isJsxExpression(node.initializer)) {
         const expression = node.initializer.expression;
 
@@ -69,8 +66,7 @@ export const unsafeLinkRule: Rule = (file) => {
           file: file.path,
           line: line + 1,
           rule: 'unsafe-link',
-          message:
-            'JavaScript URLs in links can execute code when activated.',
+          message: 'JavaScript URLs in links can execute code when activated.',
           evidence: file.content.split('\n')[line]?.trim() ?? '',
           requiresAIReview: true,
         });
