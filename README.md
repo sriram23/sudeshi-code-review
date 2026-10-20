@@ -1,15 +1,15 @@
 # Sudeshi Code Review
 
-A TypeScript and React code review CLI that detects selected security issues and generates a Markdown report, with optional AI-assisted analysis powered by Sarvam AI.
+A TypeScript and React code-review CLI that scans JavaScript and TypeScript repositories for selected security patterns and produces a Markdown report. Optional AI-assisted analysis is powered by Sarvam AI.
 
 ## Features
 
 - Scans JavaScript and TypeScript repositories.
 - Detects selected dangerous HTML insertion patterns, hardcoded secrets, and JavaScript URLs in JSX links.
-- Produces a Markdown report with findings, severity, evidence, and optional AI assessments.
+- Reports findings with severity and evidence in Markdown.
 - Works without an AI API key using deterministic rules.
 - Supports optional Sarvam AI analysis using your own API key.
-- Reports rule confidence and, when AI review is enabled, AI assessments.
+- Includes automated tests for scanning, rules, reporting, and AI-provider behavior.
 
 ## Requirements
 
@@ -18,15 +18,13 @@ A TypeScript and React code review CLI that detects selected security issues and
 
 ## Installation
 
-The npm package is being prepared for its first release.
-
-Once published, install it globally:
+Install globally:
 
 ```bash
 npm install --global sudeshi-code-review
 ```
 
-Alternatively, run it through `npx`:
+Or run without a global install:
 
 ```bash
 npx sudeshi-code-review /path/to/repository
@@ -40,27 +38,23 @@ Scan a local repository:
 sudeshi-code-review /path/to/repository
 ```
 
-The CLI generates a Markdown report in the terminal.
-
-### Command-line options
-
-Display usage information:
+Show command-line help:
 
 ```bash
 sudeshi-code-review --help
 ```
 
-Display the installed version:
+Show the installed version:
 
 ```bash
 sudeshi-code-review --version
 ```
 
-The CLI expects a repository directory when performing a review.
+Provide a repository directory when running a scan. Review the report and validate findings before acting on them.
 
-## Optional AI review
+## Optional AI-assisted review
 
-Sudeshi Code Review works without an AI API key. To enable AI-assisted analysis, configure your Sarvam API key in your environment before running the CLI.
+AI review is optional. Without `SARVAM_API_KEY`, the CLI uses its deterministic rules.
 
 **Git Bash**
 
@@ -78,9 +72,7 @@ sudeshi-code-review "C:\path\to\repository"
 
 Never commit API keys or include them in source code.
 
-When AI review is enabled, selected source context is sent to Sarvam AI for analysis. Review the privacy implications before scanning private or sensitive repositories.
-
-AI-assisted results are advisory and should be reviewed by a developer.
+When AI review is enabled, selected source context is sent to Sarvam AI for analysis. Only enable this feature for repositories whose source you are authorized and comfortable sharing with the configured provider. AI assessments are advisory and must be reviewed by a developer.
 
 ## Current detection rules
 
@@ -90,28 +82,27 @@ AI-assisted results are advisory and should be reviewed by a developer.
 | `hardcoded-secret` | Detects selected hardcoded credential patterns.   |
 | `unsafe-link`      | Detects JavaScript URLs in JSX link targets.      |
 
-These rules cover selected patterns; they do not detect every possible instance of these issues.
+These rules cover selected patterns, not every possible instance of these issues.
 
-## Limitations
+## Limitations and responsible use
 
-Sudeshi Code Review is an early-stage static analysis tool, not a complete security scanner.
+Sudeshi Code Review is a focused static-analysis tool—not a complete security scanner or a certification that a repository is secure.
 
-- Findings may include false positives and false negatives.
+- Findings can include false positives and false negatives.
 - Dynamic data flows are not comprehensively analyzed.
 - Detection is limited to the currently implemented JavaScript and TypeScript rules.
-- The presence or absence of findings does not establish that a repository is secure.
-- AI assessments may be inaccurate and should be reviewed by a developer.
+- A clean report does not establish that a repository is secure.
+- AI assessments can be inaccurate and require human review.
 - Source-context redaction before AI analysis has limitations, particularly with interpolated template literals. Do not assume all sensitive source content will be removed before it is sent to an AI provider.
-- Only enable AI review when you are comfortable sending the selected source context to the configured provider.
+- Review the privacy implications before enabling AI review on private or sensitive repositories.
 
 ## Development
-
-Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/sriram23/sudeshi-code-review.git
 cd sudeshi-code-review
 npm ci
+npm run setup:hooks
 ```
 
 Run the validation checks:
@@ -124,25 +115,15 @@ npm run build
 npm pack --dry-run
 ```
 
-### Git hooks
-
-Husky is used for Git hooks during development. After installing dependencies in a Git checkout, initialize the hooks once:
-
-```bash
-npm run setup:hooks
-```
-
-This command is intended for contributors working in a Git repository, not for users installing the CLI package.
+`npm run setup:hooks` initializes Husky hooks for contributors working in a Git checkout. It is not required by users installing the published CLI.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and pull-request guidance.
 
 ## Security
 
-See [SECURITY.md](SECURITY.md).
-
-Please report security vulnerabilities according to the instructions in `SECURITY.md`.
+Please see [SECURITY.md](SECURITY.md) for vulnerability-reporting guidance. Do not disclose exploitable vulnerabilities or real credentials in public issues.
 
 ## License
 
