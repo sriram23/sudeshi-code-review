@@ -24,6 +24,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects a hardcoded password', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -45,6 +46,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects a hardcoded secret', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -66,6 +68,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('returns no findings when no hardcoded secret is present', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -78,6 +81,7 @@ describe('hardcodedSecretRule', () => {
 
     expect(findings).toEqual([]);
   });
+
   it('detects multiple hardcoded secrets with correct line numbers', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -129,6 +133,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects secrets with different spacing around the assignment', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -139,7 +144,6 @@ describe('hardcodedSecretRule', () => {
     });
 
     expect(findings).toHaveLength(2);
-
     expect(findings[0]?.line).toBe(1);
     expect(findings[1]?.line).toBe(2);
   });
@@ -180,6 +184,7 @@ describe('hardcodedSecretRule', () => {
       evidence: "const password = 'actual-password';",
     });
   });
+
   it('detects a hardcoded access token', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -201,6 +206,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects a hardcoded API key in an object property', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -227,6 +233,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects a hardcoded token in an object property', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -252,6 +259,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects credentials embedded in a database URL property', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -278,6 +286,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('ignores database URLs without embedded credentials', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -312,23 +321,33 @@ describe('hardcodedSecretRule', () => {
         'const apiKey = `prefix-${process.env.API_KEY}`;',
         'const internalToken = `token-${getToken()}`;',
         'const databaseUrl = `postgres://${process.env.DB_HOST}/demo_db`;',
+        'export const config = {',
+        '  apiKey: `prefix-${process.env.API_KEY}`,',
+        '  internalToken: `token-${getToken()}`,',
+        '};',
       ].join('\n'),
     });
 
     expect(findings).toEqual([]);
   });
 
-  it('detects secrets in strings containing escaped quotes', () => {
+  it('detects hardcoded secrets containing escaped quotes', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
       content: String.raw`const apiKey = "prefix\"unique-secret-suffix";`,
     });
 
     expect(findings).toHaveLength(1);
-    expect(findings[0]?.rule).toBe('hardcoded-secret');
+    expect(findings[0]).toMatchObject({
+      rule: 'hardcoded-secret',
+      severity: 'high',
+      line: 1,
+      evidence: String.raw`const apiKey = "prefix\"unique-secret-suffix";`,
+      requiresAIReview: true,
+    });
   });
 
-  it('ignores secret-like object properties that use dynamic values', () => {
+  it('ignores object properties that use dynamic values', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
       content: [
@@ -336,6 +355,8 @@ describe('hardcodedSecretRule', () => {
         '  apiKey: process.env.API_KEY,',
         '  internalToken: getToken(),',
         '  password: config.password,',
+        '  clientSecret: config.clientSecret,',
+        '  databaseUrl: "postgres://localhost:5432/demo_db",',
         '};',
       ].join('\n'),
     });
