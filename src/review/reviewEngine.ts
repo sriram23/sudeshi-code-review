@@ -18,16 +18,16 @@ type ReviewInput = {
   findings: Finding[];
 };
 
-
-const SECRET_ASSIGNMENT_PATTERN =
-  String.raw`\b([\w$]*(?:api[_-]?key|password|secret|client[_-]?secret|token|database[_-]?url))\s*(=|:)\s*(['"])((?:\\.|[^\\])*?)\3`;
+const SECRET_ASSIGNMENT_PATTERN = String.raw`\b([\w$]*(?:api[_-]?key|password|secret|client[_-]?secret|token|database[_-]?url))\s*(=|:)\s*(?:(['"])((?:\\.|[^\\])*?)\3|(\`)((?:\\.|(?!\$\{)[^\\])*?)\5)`;
 
 function createSecretAssignmentRegex(global = false): RegExp {
   return new RegExp(SECRET_ASSIGNMENT_PATTERN, global ? 'gi' : 'i');
 }
 
 function extractSecretValue(evidence: string | undefined): string | undefined {
-  return evidence?.match(createSecretAssignmentRegex())?.[4];
+  const match = evidence?.match(createSecretAssignmentRegex());
+
+  return match?.[4] ?? match?.[6];
 }
 
 export class ReviewEngine {
@@ -36,8 +36,17 @@ export class ReviewEngine {
   private redactHardcodedSecret(source: string): string {
     return source.replace(
       createSecretAssignmentRegex(true),
-      (_match, name: string, separator: string, quote: string) =>
-        `${name} ${separator} ${quote}[REDACTED]${quote}`,
+      (
+        _match,
+        name: string,
+        separator: string,
+        quote: string | undefined,
+        _stringValue: string | undefined,
+        templateQuote: string | undefined,
+      ) => {
+        const delimiter = quote ?? templateQuote;
+        return `${name} ${separator} ${delimiter}[REDACTED]${delimiter}`;
+      },
     );
   }
 

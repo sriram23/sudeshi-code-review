@@ -290,4 +290,68 @@ describe('hardcodedSecretRule', () => {
 
     expect(findings).toEqual([]);
   });
+
+  it('detects hardcoded secrets containing escaped quotes', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: String.raw`const apiKey = "prefix\"unique-secret-suffix";`,
+    });
+
+    expect(findings).toHaveLength(1);
+
+    expect(findings[0]).toMatchObject({
+      rule: 'hardcoded-secret',
+      severity: 'high',
+      line: 1,
+      evidence: String.raw`const apiKey = "prefix\"unique-secret-suffix";`,
+      requiresAIReview: true,
+    });
+  });
+
+  it('ignores object properties that reference environment variables or functions', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        'export const config = {',
+        '  apiKey: process.env.API_KEY,',
+        '  password: getPassword(),',
+        '  clientSecret: config.clientSecret,',
+        '  databaseUrl: "postgres://localhost:5432/demo_db",',
+        '};',
+      ].join('\n'),
+    });
+
+    expect(findings).toEqual([]);
+  });
+
+  it('detects hardcoded secrets in template literals without interpolation', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: 'const apiKey = `my-hardcoded-api-key`;',
+    });
+
+    expect(findings).toHaveLength(1);
+
+    expect(findings[0]).toMatchObject({
+      rule: 'hardcoded-secret',
+      severity: 'high',
+      line: 1,
+      requiresAIReview: true,
+    });
+  });
+
+  it('ignores template literals containing interpolated values', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        'export const config = {',
+        '  apiKey: `prefix-${process.env.API_KEY}`,',
+        '  internalToken: `token-${getToken()}`,',
+        '};',
+        'const databaseUrl = `postgres://${process.env.DB_HOST}/demo_db`;',
+      ].join('\n'),
+    });
+
+    expect(findings).toEqual([]);
+  });
 });

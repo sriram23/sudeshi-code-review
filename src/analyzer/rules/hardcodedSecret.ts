@@ -21,7 +21,8 @@ export const hardcodedSecretRule: Rule = (file) => {
       ts.isIdentifier(node.name) &&
       secretNamePattern.test(node.name.text) &&
       node.initializer &&
-      ts.isStringLiteral(node.initializer)
+      (ts.isStringLiteral(node.initializer) ||
+        ts.isNoSubstitutionTemplateLiteral(node.initializer))
     ) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(
         node.getStart(sourceFile),
@@ -48,7 +49,8 @@ export const hardcodedSecretRule: Rule = (file) => {
       ts.isPropertyAssignment(node) &&
       ts.isIdentifier(node.name) &&
       secretNamePattern.test(node.name.text) &&
-      ts.isStringLiteral(node.initializer)
+      (ts.isStringLiteral(node.initializer) ||
+        ts.isNoSubstitutionTemplateLiteral(node.initializer))
     ) {
       const propertyName = node.name.text;
       const value = node.initializer.text;
