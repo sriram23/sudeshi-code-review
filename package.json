@@ -19,7 +19,7 @@
     "test": "vitest run",
     "lint": "eslint",
     "format": "prettier --write .",
-    "prepare": "husky",
+    "setup:hooks": "husky",
     "test:watch": "vitest",
     "format:check": "prettier --check .",
     "prepack": "npm run build"

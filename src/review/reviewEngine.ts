@@ -1,3 +1,4 @@
+import ts from 'typescript';
 import type { AIProvider } from '../ai/provider.js';
 import type { Finding } from '../analyzer/finding.js';
 import type { SourceFile } from '../analyzer/sourceFile.js';
@@ -26,28 +27,78 @@ function createSecretAssignmentRegex(global = false): RegExp {
 
 function extractSecretValue(evidence: string | undefined): string | undefined {
   const match = evidence?.match(createSecretAssignmentRegex());
-
   return match?.[4] ?? match?.[6];
 }
 
 export class ReviewEngine {
   constructor(private readonly config: ReviewEngineConfig) {}
 
-  private redactHardcodedSecret(source: string): string {
-    return source.replace(
-      createSecretAssignmentRegex(true),
-      (
-        _match,
-        name: string,
-        separator: string,
-        quote: string | undefined,
-        _stringValue: string | undefined,
-        templateQuote: string | undefined,
-      ) => {
-        const delimiter = quote ?? templateQuote;
-        return `${name} ${separator} ${delimiter}[REDACTED]${delimiter}`;
-      },
+  private redactHardcodedSecret(
+    source: string,
+    filePath = 'source.ts',
+  ): string {
+    const scriptKind = filePath.endsWith('.tsx')
+      ? ts.ScriptKind.TSX
+      : filePath.endsWith('.jsx')
+        ? ts.ScriptKind.JSX
+        : filePath.endsWith('.js')
+          ? ts.ScriptKind.JS
+          : ts.ScriptKind.TS;
+
+    const sourceFile = ts.createSourceFile(
+      filePath,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      scriptKind,
     );
+
+    const secretNamePattern =
+      /(?:api[_-]?key|password|secret|client[_-]?secret|token|database[_-]?url)/i;
+
+    const edits: Array<{ start: number; end: number }> = [];
+
+    function visit(node: ts.Node): void {
+      let name: string | undefined;
+      let initializer: ts.Expression | undefined;
+
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+        name = node.name.text;
+        initializer = node.initializer;
+      } else if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name)) {
+        name = node.name.text;
+        initializer = node.initializer;
+      }
+
+      if (
+        name &&
+        secretNamePattern.test(name) &&
+        initializer &&
+        (ts.isStringLiteral(initializer) ||
+          ts.isNoSubstitutionTemplateLiteral(initializer) ||
+          ts.isTemplateExpression(initializer))
+      ) {
+        edits.push({
+          start: initializer.getStart(sourceFile),
+          end: initializer.getEnd(),
+        });
+      }
+
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+
+    let redactedSource = source;
+
+    for (const edit of edits.sort((a, b) => b.start - a.start)) {
+      redactedSource =
+        redactedSource.slice(0, edit.start) +
+        "'[REDACTED]'" +
+        redactedSource.slice(edit.end);
+    }
+
+    return redactedSource;
   }
 
   private redactSecretValue(source: string, finding: Finding): string {
@@ -90,7 +141,7 @@ export class ReviewEngine {
       const safeSourceFile = {
         ...sourceFile,
         content: this.redactSecretValue(
-          this.redactHardcodedSecret(sourceFile.content),
+          this.redactHardcodedSecret(sourceFile.content, sourceFile.path),
           finding,
         ),
       };
@@ -98,7 +149,10 @@ export class ReviewEngine {
       const safeFinding = {
         ...finding,
         ...(finding.evidence !== undefined && {
-          evidence: this.redactHardcodedSecret(finding.evidence),
+          evidence: this.redactSecretValue(
+            this.redactHardcodedSecret(finding.evidence, sourceFile.path),
+            finding,
+          ),
         }),
       };
 

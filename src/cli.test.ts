@@ -164,15 +164,6 @@ describe('CLI', () => {
     const { join } = await import('node:path');
 
     const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
-    // const finding = {
-    //   ruleId: 'dangerous-html',
-    //   file: 'src/example.ts',
-    //   message: 'Potentially dangerous HTML',
-    //   severity: 'high',
-    //   line: 1,
-    //   requiresAIReview: false,
-    // } as Finding;
-
     const finding: Finding = {
       id: 'finding-1',
       category: 'security',
@@ -460,6 +451,39 @@ describe('CLI', () => {
 
       vi.unstubAllGlobals();
       rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
+  it('prints help without requiring a repository path', async () => {
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await expect(runCLI(['--help'])).resolves.toBeUndefined();
+
+      expect(writeOutput).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+      );
+    } finally {
+      writeOutput.mockRestore();
+    }
+  });
+
+  it('prints the package version without requiring a repository path', async () => {
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await expect(runCLI(['--version'])).resolves.toBeUndefined();
+
+      expect(writeOutput).toHaveBeenCalledWith('0.1.0\n');
+    } finally {
+      writeOutput.mockRestore();
     }
   });
 });

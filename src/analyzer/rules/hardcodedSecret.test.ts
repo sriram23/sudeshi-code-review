@@ -24,6 +24,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects a hardcoded password', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -45,6 +46,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects a hardcoded secret', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -66,6 +68,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('returns no findings when no hardcoded secret is present', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -78,6 +81,7 @@ describe('hardcodedSecretRule', () => {
 
     expect(findings).toEqual([]);
   });
+
   it('detects multiple hardcoded secrets with correct line numbers', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -129,6 +133,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects secrets with different spacing around the assignment', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -139,7 +144,6 @@ describe('hardcodedSecretRule', () => {
     });
 
     expect(findings).toHaveLength(2);
-
     expect(findings[0]?.line).toBe(1);
     expect(findings[1]?.line).toBe(2);
   });
@@ -180,6 +184,7 @@ describe('hardcodedSecretRule', () => {
       evidence: "const password = 'actual-password';",
     });
   });
+
   it('detects a hardcoded access token', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -201,6 +206,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects a hardcoded API key in an object property', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -227,6 +233,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects a hardcoded token in an object property', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -252,6 +259,7 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('detects credentials embedded in a database URL property', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
@@ -278,12 +286,44 @@ describe('hardcodedSecretRule', () => {
       },
     ]);
   });
+
   it('ignores database URLs without embedded credentials', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
       content: [
         'export const config = {',
         '  databaseUrl: "postgres://localhost:5432/demo_db",',
+        '};',
+      ].join('\n'),
+    });
+
+    expect(findings).toEqual([]);
+  });
+
+  it('detects secrets in static template literals', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: 'const apiKey = `static-template-secret`;',
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'hardcoded-secret',
+      line: 1,
+      evidence: 'const apiKey = `static-template-secret`;',
+    });
+  });
+
+  it('ignores interpolated template literals', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        'const apiKey = `prefix-${process.env.API_KEY}`;',
+        'const internalToken = `token-${getToken()}`;',
+        'const databaseUrl = `postgres://${process.env.DB_HOST}/demo_db`;',
+        'export const config = {',
+        '  apiKey: `prefix-${process.env.API_KEY}`,',
+        '  internalToken: `token-${getToken()}`,',
         '};',
       ].join('\n'),
     });
@@ -298,7 +338,6 @@ describe('hardcodedSecretRule', () => {
     });
 
     expect(findings).toHaveLength(1);
-
     expect(findings[0]).toMatchObject({
       rule: 'hardcoded-secret',
       severity: 'high',
@@ -308,47 +347,17 @@ describe('hardcodedSecretRule', () => {
     });
   });
 
-  it('ignores object properties that reference environment variables or functions', () => {
+  it('ignores object properties that use dynamic values', () => {
     const findings = hardcodedSecretRule({
       path: 'src/config.ts',
       content: [
         'export const config = {',
         '  apiKey: process.env.API_KEY,',
-        '  password: getPassword(),',
+        '  internalToken: getToken(),',
+        '  password: config.password,',
         '  clientSecret: config.clientSecret,',
         '  databaseUrl: "postgres://localhost:5432/demo_db",',
         '};',
-      ].join('\n'),
-    });
-
-    expect(findings).toEqual([]);
-  });
-
-  it('detects hardcoded secrets in template literals without interpolation', () => {
-    const findings = hardcodedSecretRule({
-      path: 'src/config.ts',
-      content: 'const apiKey = `my-hardcoded-api-key`;',
-    });
-
-    expect(findings).toHaveLength(1);
-
-    expect(findings[0]).toMatchObject({
-      rule: 'hardcoded-secret',
-      severity: 'high',
-      line: 1,
-      requiresAIReview: true,
-    });
-  });
-
-  it('ignores template literals containing interpolated values', () => {
-    const findings = hardcodedSecretRule({
-      path: 'src/config.ts',
-      content: [
-        'export const config = {',
-        '  apiKey: `prefix-${process.env.API_KEY}`,',
-        '  internalToken: `token-${getToken()}`,',
-        '};',
-        'const databaseUrl = `postgres://${process.env.DB_HOST}/demo_db`;',
       ].join('\n'),
     });
 

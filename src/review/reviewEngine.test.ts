@@ -667,6 +667,40 @@ describe('ReviewEngine', () => {
     expect(finding.evidence).toContain(secret);
   });
 
+  it('redacts static template literal secrets before AI review', async () => {
+    const secret = 'static-template-secret';
+    const evidence = `const apiKey = \`${secret}\`;`;
+
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence,
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [{ path: 'src/config.ts', content: evidence }],
+      findings: [finding],
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+  });
+
   it('redacts the entire secret when its string contains an escaped quote', async () => {
     const secretSuffix = 'unique-secret-suffix';
     const evidence = String.raw`const apiKey = "prefix\"${secretSuffix}";`;
@@ -711,5 +745,75 @@ describe('ReviewEngine', () => {
     const aiBoundData = JSON.stringify(analyze.mock.calls);
 
     expect(aiBoundData).not.toContain(secretSuffix);
+  });
+  it('redacts secrets inside an interpolated template expression before AI review', async () => {
+    const secret = 'interpolated-secret-123';
+    const source = "const apiKey = `prefix-${'interpolated-secret-123'}`;";
+
+    const finding: Finding = {
+      id: 'dangerous-html',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'dangerous-html',
+      message: 'A potentially dangerous pattern was found',
+      evidence: 'dangerouslySetInnerHTML',
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Review the code.',
+    });
+
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [{ path: 'src/config.ts', content: source }],
+      findings: [finding],
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+  });
+
+  it('redacts secrets inside interpolated template expressions in object properties', async () => {
+    const secret = 'object-interpolated-secret-456';
+    const source =
+      "export const config = {\n  clientSecret: `prefix-${'object-interpolated-secret-456'}`,\n};";
+
+    const finding: Finding = {
+      id: 'dangerous-html',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 2,
+      rule: 'dangerous-html',
+      message: 'A potentially dangerous pattern was found',
+      evidence: 'dangerouslySetInnerHTML',
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Review the code.',
+    });
+
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [{ path: 'src/config.ts', content: source }],
+      findings: [finding],
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
   });
 });
