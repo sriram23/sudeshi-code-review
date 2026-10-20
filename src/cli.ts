@@ -31,6 +31,35 @@ export async function runCLI(
       ]),
   },
 ): Promise<void> {
+  if (args.includes('--help') || args.includes('-h')) {
+    process.stdout.write(
+      [
+        'Sudeshi Code Review',
+        '',
+        'Usage:',
+        '  sudeshi-code-review <repository-path>',
+        '',
+        'Options:',
+        '  -h, --help       Show this help message',
+        '  -v, --version    Show the installed version',
+        '',
+        'Environment:',
+        '  SARVAM_API_KEY   Optional API key for AI-assisted review',
+        '',
+      ].join('\n'),
+    );
+    return;
+  }
+
+  if (args.includes('--version') || args.includes('-v')) {
+    const packageJson = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as { version: string };
+
+    process.stdout.write(`${packageJson.version}\n`);
+    return;
+  }
+
   const repositoryPath = args[0];
 
   if (!repositoryPath) {

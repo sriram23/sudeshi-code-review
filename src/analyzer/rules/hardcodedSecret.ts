@@ -2,6 +2,15 @@ import ts from 'typescript';
 import type { Finding } from '../finding.js';
 import type { Rule } from '../rule.js';
 
+const SECRET_NAME_PATTERN =
+  /^(apiKey|api_key|paymentApiKey|accessToken|access_token|internalToken|internal_token|databaseUrl|database_url|password|secret|clientSecret|client_secret|token)$/i;
+
+function isStaticSecretString(
+  node: ts.Expression,
+): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral {
+  return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
+}
+
 export const hardcodedSecretRule: Rule = (file) => {
   const findings: Finding[] = [];
   const sourceFile = ts.createSourceFile(
@@ -13,15 +22,12 @@ export const hardcodedSecretRule: Rule = (file) => {
   );
 
   function visit(node: ts.Node): void {
-    const secretNamePattern =
-      /^(apiKey|api_key|paymentApiKey|accessToken|access_token|internalToken|internal_token|databaseUrl|database_url|password|secret|clientSecret|client_secret|token)$/i;
-
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
-      secretNamePattern.test(node.name.text) &&
+      SECRET_NAME_PATTERN.test(node.name.text) &&
       node.initializer &&
-      ts.isStringLiteral(node.initializer)
+      isStaticSecretString(node.initializer)
     ) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(
         node.getStart(sourceFile),
@@ -47,8 +53,8 @@ export const hardcodedSecretRule: Rule = (file) => {
     if (
       ts.isPropertyAssignment(node) &&
       ts.isIdentifier(node.name) &&
-      secretNamePattern.test(node.name.text) &&
-      ts.isStringLiteral(node.initializer)
+      SECRET_NAME_PATTERN.test(node.name.text) &&
+      isStaticSecretString(node.initializer)
     ) {
       const propertyName = node.name.text;
       const value = node.initializer.text;
