@@ -746,4 +746,78 @@ describe('ReviewEngine', () => {
 
     expect(aiBoundData).not.toContain(secretSuffix);
   });
+
+  it('redacts interpolated template literal secrets before AI review', async () => {
+    const secret = 'interpolated-secret-123';
+    const evidence = `const apiKey = \`prefix-${secret}\`;`;
+
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence,
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [{ path: 'src/config.ts', content: evidence }],
+      findings: [finding],
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(analyze.mock.calls.length).toBeGreaterThan(0);
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+  });
+
+  it('redacts interpolated template literal secrets in object properties', async () => {
+    const secret = 'object-interpolated-secret-456';
+    const evidence = `export const config = {
+  clientSecret: \`prefix-${secret}\`,
+};`;
+
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 2,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: 'clientSecret: `[REDACTED]`,',
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({
+      files: [{ path: 'src/config.ts', content: evidence }],
+      findings: [finding],
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(analyze.mock.calls.length).toBeGreaterThan(0);
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+  });
 });
