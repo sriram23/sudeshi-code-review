@@ -6,7 +6,7 @@ Notable user-facing changes are documented here.
 
 Changes after the initial 1.0.0 release will be recorded here.
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-10-20
 
 ### Added
 
@@ -18,5 +18,5 @@ Changes after the initial 1.0.0 release will be recorded here.
 
 ### Security
 
-- **Known limitation:** AI-context redaction does not currently cover all interpolated template literals in secret-like assignments. For example, a template literal containing both hardcoded text and `${...}` expressions may retain sensitive source text when included in AI review context. Do not rely on current redaction as a guarantee that all sensitive source code will be removed before it is sent to an AI provider.
+- **Known limitation:** AI-context redaction does not currently cover all interpolated template literals in secret-like assignments. Do not rely on current redaction as a guarantee that all sensitive source code will be removed before it is sent to an AI provider.
 - Findings and AI assessments are advisory; the tool does not guarantee detection of every vulnerability.
