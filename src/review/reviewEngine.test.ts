@@ -746,21 +746,20 @@ describe('ReviewEngine', () => {
 
     expect(aiBoundData).not.toContain(secretSuffix);
   });
-
-  it('redacts interpolated template literal secrets before AI review', async () => {
+  it('redacts secrets inside an interpolated template expression before AI review', async () => {
     const secret = 'interpolated-secret-123';
-    const evidence = `const apiKey = \`prefix-${secret}\`;`;
+    const source = "const apiKey = `prefix-${'interpolated-secret-123'}`;";
 
     const finding: Finding = {
-      id: 'hardcoded-secret',
+      id: 'dangerous-html',
       category: 'security',
       severity: 'high',
       confidence: 1,
       file: 'src/config.ts',
       line: 1,
-      rule: 'hardcoded-secret',
-      message: 'A hardcoded secret may be present',
-      evidence,
+      rule: 'dangerous-html',
+      message: 'A potentially dangerous pattern was found',
+      evidence: 'dangerouslySetInnerHTML',
       requiresAIReview: true,
     };
 
@@ -768,37 +767,35 @@ describe('ReviewEngine', () => {
       valid: true,
       confidence: 0.9,
       reason: 'Reviewed the finding.',
-      recommendation: 'Use an environment variable.',
+      recommendation: 'Review the code.',
     });
 
     const engine = new ReviewEngine({ provider: { analyze } });
 
     await engine.review({
-      files: [{ path: 'src/config.ts', content: evidence }],
+      files: [{ path: 'src/config.ts', content: source }],
       findings: [finding],
     });
 
     expect(analyze).toHaveBeenCalledOnce();
-    expect(analyze.mock.calls.length).toBeGreaterThan(0);
     expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
   });
 
-  it('redacts interpolated template literal secrets in object properties', async () => {
+  it('redacts secrets inside interpolated template expressions in object properties', async () => {
     const secret = 'object-interpolated-secret-456';
-    const evidence = `export const config = {
-  clientSecret: \`prefix-${secret}\`,
-};`;
+    const source =
+      "export const config = {\n  clientSecret: `prefix-${'object-interpolated-secret-456'}`,\n};";
 
     const finding: Finding = {
-      id: 'hardcoded-secret',
+      id: 'dangerous-html',
       category: 'security',
       severity: 'high',
       confidence: 1,
       file: 'src/config.ts',
       line: 2,
-      rule: 'hardcoded-secret',
-      message: 'A hardcoded secret may be present',
-      evidence: 'clientSecret: `[REDACTED]`,',
+      rule: 'dangerous-html',
+      message: 'A potentially dangerous pattern was found',
+      evidence: 'dangerouslySetInnerHTML',
       requiresAIReview: true,
     };
 
@@ -806,18 +803,17 @@ describe('ReviewEngine', () => {
       valid: true,
       confidence: 0.9,
       reason: 'Reviewed the finding.',
-      recommendation: 'Use an environment variable.',
+      recommendation: 'Review the code.',
     });
 
     const engine = new ReviewEngine({ provider: { analyze } });
 
     await engine.review({
-      files: [{ path: 'src/config.ts', content: evidence }],
+      files: [{ path: 'src/config.ts', content: source }],
       findings: [finding],
     });
 
     expect(analyze).toHaveBeenCalledOnce();
-    expect(analyze.mock.calls.length).toBeGreaterThan(0);
     expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
   });
 });
