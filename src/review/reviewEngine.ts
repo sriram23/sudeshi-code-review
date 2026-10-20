@@ -18,14 +18,14 @@ type ReviewInput = {
   findings: Finding[];
 };
 
-const SECRET_ASSIGNMENT_PATTERN = String.raw`\b(apiKey|api_key|password|secret|clientSecret|client_secret|token)\s*=\s*(['"])(.*?)\2`;
+const SECRET_ASSIGNMENT_PATTERN = String.raw`\b([\w$]*(?:api[_-]?key|password|secret|client[_-]?secret|token|databaseurl))\s*(=|:)\s*(['"])(.*?)\3`;
 
 function createSecretAssignmentRegex(global = false): RegExp {
-  return new RegExp(SECRET_ASSIGNMENT_PATTERN, global ? 'g' : undefined);
+  return new RegExp(SECRET_ASSIGNMENT_PATTERN, global ? 'gi' : 'i');
 }
 
 function extractSecretValue(evidence: string | undefined): string | undefined {
-  return evidence?.match(createSecretAssignmentRegex())?.[3];
+  return evidence?.match(createSecretAssignmentRegex())?.[4];
 }
 
 export class ReviewEngine {
@@ -34,8 +34,8 @@ export class ReviewEngine {
   private redactHardcodedSecret(source: string): string {
     return source.replace(
       createSecretAssignmentRegex(true),
-      (_match, name: string, quote: string) =>
-        `${name} = ${quote}{REDACTED}${quote}`,
+      (_match, name: string, separator: string, quote: string) =>
+        `${name} ${separator} ${quote}[REDACTED]${quote}`,
     );
   }
 

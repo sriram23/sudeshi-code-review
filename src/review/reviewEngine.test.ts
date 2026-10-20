@@ -467,4 +467,64 @@ describe('ReviewEngine', () => {
 
     expect(JSON.stringify(request)).not.toContain(secret);
   });
+  it('reviews and redacts hardcoded secrets in object properties', async () => {
+    const secret = 'test-payment-api-key-secret';
+
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 2,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: `  paymentApiKey: "${secret}",`,
+      requiresAIReview: true,
+    };
+
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: [
+        'export const config = {',
+        `  paymentApiKey: "${secret}",`,
+        '};',
+      ].join('\n'),
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      severity: 'high',
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const engine = new ReviewEngine({
+      provider: { analyze },
+    });
+
+    const result = await engine.review({
+      files: [sourceFile],
+      findings: [finding],
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+
+    expect(result.findings[0]).toMatchObject({
+      id: 'hardcoded-secret',
+      aiReview: {
+        valid: true,
+        severity: 'high',
+        confidence: 0.9,
+        reason: 'Reviewed the finding.',
+        recommendation: 'Use an environment variable.',
+      },
+    });
+
+    // Redaction must not mutate the original inputs.
+    expect(sourceFile.content).toContain(secret);
+    expect(finding.evidence).toContain(secret);
+  });
 });
