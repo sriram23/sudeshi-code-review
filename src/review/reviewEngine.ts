@@ -18,7 +18,9 @@ type ReviewInput = {
   findings: Finding[];
 };
 
-const SECRET_ASSIGNMENT_PATTERN = String.raw`\b([\w$]*(?:api[_-]?key|password|secret|client[_-]?secret|token|databaseurl))\s*(=|:)\s*(['"])(.*?)\3`;
+
+const SECRET_ASSIGNMENT_PATTERN =
+  String.raw`\b([\w$]*(?:api[_-]?key|password|secret|client[_-]?secret|token|database[_-]?url))\s*(=|:)\s*(['"])((?:\\.|[^\\])*?)\3`;
 
 function createSecretAssignmentRegex(global = false): RegExp {
   return new RegExp(SECRET_ASSIGNMENT_PATTERN, global ? 'gi' : 'i');
