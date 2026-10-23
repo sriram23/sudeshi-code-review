@@ -11,6 +11,25 @@ function isStaticSecretString(
   return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
 }
 
+function redactSecretEvidence(
+  line: string,
+  value: string,
+  literalText?: string,
+): string {
+  if (!value) {
+    return line;
+  }
+
+  if (literalText) {
+    return line.replace(
+      literalText,
+      literalText[0] + '[REDACTED]' + literalText[0],
+    );
+  }
+
+  return line.replace(value, '[REDACTED]');
+}
+
 export const hardcodedSecretRule: Rule = (file) => {
   const findings: Finding[] = [];
   const sourceFile = ts.createSourceFile(
@@ -44,7 +63,11 @@ export const hardcodedSecretRule: Rule = (file) => {
           line: line + 1,
           rule: 'hardcoded-secret',
           message: 'A hardcoded secret may be present',
-          evidence: file.content.split('\n')[line]?.trim() ?? '',
+          evidence: redactSecretEvidence(
+            file.content.split('\n')[line]?.trim() ?? '',
+            value,
+            node.initializer.getText(sourceFile),
+          ),
           requiresAIReview: true,
         });
       }
@@ -85,7 +108,11 @@ export const hardcodedSecretRule: Rule = (file) => {
         line: line + 1,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: file.content.split('\n')[line]?.trim() ?? '',
+        evidence: redactSecretEvidence(
+          file.content.split('\n')[line]?.trim() ?? '',
+          value,
+          node.initializer.getText(sourceFile),
+        ),
         requiresAIReview: true,
       });
     }
