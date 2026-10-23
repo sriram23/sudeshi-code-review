@@ -480,7 +480,7 @@ describe('CLI', () => {
 
       await expect(runCLI(['--version'])).resolves.toBeUndefined();
 
-      expect(writeOutput).toHaveBeenCalledWith('1.0.0\n');
+      expect(writeOutput).toHaveBeenCalledWith('1.1.0\n');
     } finally {
       writeOutput.mockRestore();
     }
