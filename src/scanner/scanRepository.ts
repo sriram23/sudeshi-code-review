@@ -4,11 +4,22 @@ import path from 'node:path';
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 const IGNORED_DIRECTORIES = new Set([
   '.git',
+  '.venv',
+  'venv',
+  'env',
+  '.tox',
+  '__pycache__',
+  '.pytest_cache',
+  '.mypy_cache',
+  '.ruff_cache',
   'node_modules',
   'dist',
   'build',
   '.next',
   'coverage',
+  '.turbo',
+  '.output',
+  'vendor',
 ]);
 
 export async function scanRepository(

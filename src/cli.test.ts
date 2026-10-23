@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { Finding } from './analyzer/finding.js';
-
 describe('CLI', () => {
   it('requires a repository path', async () => {
     const writeError = vi
@@ -481,9 +480,299 @@ describe('CLI', () => {
 
       await expect(runCLI(['--version'])).resolves.toBeUndefined();
 
-      expect(writeOutput).toHaveBeenCalledWith('1.0.0\n');
+      expect(writeOutput).toHaveBeenCalledWith('1.1.0\n');
     } finally {
       writeOutput.mockRestore();
+    }
+  });
+
+  it('writes a JSON report to stdout when --format json is specified', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI([repositoryPath, '--format', 'json'], {
+        scanRepository: vi.fn().mockResolvedValue([]),
+        analyze: vi.fn().mockReturnValue([]),
+      });
+
+      const output = writeOutput.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join('');
+
+      expect(() => JSON.parse(output)).not.toThrow();
+      expect(JSON.parse(output)).toMatchObject({
+        findings: [],
+        filesScanned: 0,
+        durationMs: 0,
+      });
+    } finally {
+      writeOutput.mockRestore();
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
+
+  it('saves a Markdown report when --output is specified', async () => {
+    const { mkdtempSync, readFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const repositoryPath = join(temporaryDirectory, 'repo');
+    const outputPath = join(temporaryDirectory, 'report.md');
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(repositoryPath);
+
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI([repositoryPath, '--output', outputPath], {
+        scanRepository: vi.fn().mockResolvedValue([]),
+        analyze: vi.fn().mockReturnValue([]),
+      });
+
+      expect(readFileSync(outputPath, 'utf8')).toContain(
+        '# Sudeshi Code Review',
+      );
+      expect(writeOutput).not.toHaveBeenCalled();
+    } finally {
+      writeOutput.mockRestore();
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('saves a JSON report when --format json and --output are specified', async () => {
+    const { mkdtempSync, readFileSync, rmSync, mkdirSync } =
+      await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const repositoryPath = join(temporaryDirectory, 'repo');
+    const outputPath = join(temporaryDirectory, 'report.json');
+
+    mkdirSync(repositoryPath);
+
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI(
+        [repositoryPath, '--format', 'json', '--output', outputPath],
+        {
+          scanRepository: vi.fn().mockResolvedValue([]),
+          analyze: vi.fn().mockReturnValue([]),
+        },
+      );
+
+      const report = JSON.parse(readFileSync(outputPath, 'utf8'));
+
+      expect(report).toEqual({
+        findings: [],
+        filesScanned: 0,
+        durationMs: 0,
+      });
+
+      expect(writeOutput).not.toHaveBeenCalled();
+    } finally {
+      writeOutput.mockRestore();
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects --format without a value', async () => {
+    const writeError = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as never);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await expect(() => runCLI(['--format'])).rejects.toThrow(
+        'process.exit called',
+      );
+
+      expect(writeError).toHaveBeenCalledWith(
+        expect.stringContaining('--format requires a value'),
+      );
+      expect(exit).toHaveBeenCalledWith(1);
+    } finally {
+      writeError.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
+  it('rejects unsupported report formats', async () => {
+    const writeError = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as never);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await expect(() =>
+        runCLI(['--format', 'xml', 'some-repository']),
+      ).rejects.toThrow('process.exit called');
+
+      expect(writeError).toHaveBeenCalledWith(
+        expect.stringContaining('--format must be either markdown or json'),
+      );
+      expect(exit).toHaveBeenCalledWith(1);
+    } finally {
+      writeError.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
+  it('rejects --output without a file path', async () => {
+    const writeError = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as never);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await expect(() =>
+        runCLI(['some-repository', '--output']),
+      ).rejects.toThrow('process.exit called');
+
+      expect(writeError).toHaveBeenCalledWith(
+        expect.stringContaining('--output requires a file path'),
+      );
+      expect(exit).toHaveBeenCalledWith(1);
+    } finally {
+      writeError.mockRestore();
+      exit.mockRestore();
+    }
+  });
+  it('writes progress messages to stderr when running in a TTY', async () => {
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const originalIsTTY = Object.getOwnPropertyDescriptor(
+      process.stderr,
+      'isTTY',
+    );
+
+    Object.defineProperty(process.stderr, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+
+    const writeError = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI([repositoryPath, '--format', 'json'], {
+        scanRepository: vi.fn().mockResolvedValue([]),
+        analyze: vi.fn().mockReturnValue([]),
+        reviewEngine: {
+          review: vi.fn().mockResolvedValue({
+            findings: [],
+            filesScanned: 0,
+            durationMs: 1,
+          }),
+        },
+      });
+
+      expect(writeError.mock.calls.map(([chunk]) => String(chunk))).toEqual([
+        'Scanning repository...\n',
+        'Analyzing files...\n',
+        'Running AI review...\n',
+        'Generating report...\n',
+      ]);
+
+      const output = writeOutput.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join('');
+
+      expect(() => JSON.parse(output)).not.toThrow();
+    } finally {
+      writeError.mockRestore();
+      writeOutput.mockRestore();
+
+      if (originalIsTTY) {
+        Object.defineProperty(process.stderr, 'isTTY', originalIsTTY);
+      } else {
+        Reflect.deleteProperty(process.stderr, 'isTTY');
+      }
+
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
+  it('does not write progress messages when stderr is not a TTY', async () => {
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const originalIsTTY = Object.getOwnPropertyDescriptor(
+      process.stderr,
+      'isTTY',
+    );
+
+    Object.defineProperty(process.stderr, 'isTTY', {
+      configurable: true,
+      value: false,
+    });
+
+    const writeError = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI([repositoryPath, '--format', 'json'], {
+        scanRepository: vi.fn().mockResolvedValue([]),
+        analyze: vi.fn().mockReturnValue([]),
+      });
+
+      expect(writeError).not.toHaveBeenCalled();
+
+      const output = writeOutput.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join('');
+
+      expect(() => JSON.parse(output)).not.toThrow();
+    } finally {
+      writeError.mockRestore();
+      writeOutput.mockRestore();
+
+      if (originalIsTTY) {
+        Object.defineProperty(process.stderr, 'isTTY', originalIsTTY);
+      } else {
+        Reflect.deleteProperty(process.stderr, 'isTTY');
+      }
+
+      rmSync(repositoryPath, { recursive: true, force: true });
     }
   });
 });

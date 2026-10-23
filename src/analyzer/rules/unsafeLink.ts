@@ -13,47 +13,66 @@ export const unsafeLinkRule: Rule = (file) => {
     file.path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
 
-  const dangerousVariables = new Set<string>();
+  function isDangerousString(node: ts.Expression): boolean {
+    return (
+      (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+      /^\s*javascript\s*:/i.test(node.text)
+    );
+  }
+  function findVisibleDeclaration(
+    reference: ts.Identifier,
+  ): ts.VariableDeclaration | undefined {
+    let current: ts.Node | undefined = reference.parent;
 
-  function collectDangerousVariables(node: ts.Node): void {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.initializer &&
-      ts.isStringLiteral(node.initializer) &&
-      /^\s*javascript\s*:/i.test(node.initializer.text)
-    ) {
-      dangerousVariables.add(node.name.text);
+    while (current) {
+      if (ts.isBlock(current) || ts.isSourceFile(current)) {
+        for (const statement of current.statements) {
+          if (!ts.isVariableStatement(statement)) continue;
+
+          for (const declaration of statement.declarationList.declarations) {
+            if (
+              ts.isIdentifier(declaration.name) &&
+              declaration.name.text === reference.text &&
+              declaration.initializer &&
+              declaration.getStart(sourceFile) < reference.getStart(sourceFile)
+            ) {
+              return declaration;
+            }
+          }
+        }
+      }
+
+      current = current.parent;
     }
 
-    ts.forEachChild(node, collectDangerousVariables);
+    return undefined;
   }
-
-  collectDangerousVariables(sourceFile);
 
   function visit(node: ts.Node): void {
     if (
       ts.isJsxAttribute(node) &&
-      node.name.getText(sourceFile) === 'href' &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === 'href' &&
       node.initializer
     ) {
-      let isDangerous = false;
+      let dangerous = false;
 
       if (ts.isStringLiteral(node.initializer)) {
-        isDangerous = /^\s*javascript\s*:/i.test(node.initializer.text);
+        dangerous = /^\s*javascript\s*:/i.test(node.initializer.text);
       } else if (ts.isJsxExpression(node.initializer)) {
         const expression = node.initializer.expression;
 
-        if (
-          expression &&
-          ts.isIdentifier(expression) &&
-          dangerousVariables.has(expression.text)
-        ) {
-          isDangerous = true;
+        if (expression && ts.isIdentifier(expression)) {
+          const declaration = findVisibleDeclaration(expression);
+
+          dangerous = Boolean(
+            declaration?.initializer &&
+            isDangerousString(declaration.initializer),
+          );
         }
       }
 
-      if (isDangerous) {
+      if (dangerous) {
         const { line } = sourceFile.getLineAndCharacterOfPosition(
           node.getStart(sourceFile),
         );

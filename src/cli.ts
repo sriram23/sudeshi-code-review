@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { scanRepository as defaultScanRepository } from './scanner/scanRepository.js';
 import type { Finding } from './analyzer/finding.js';
@@ -9,15 +9,24 @@ import { dangerousHtmlRule } from './analyzer/rules/dangerousHtml.js';
 import { hardcodedSecretRule } from './analyzer/rules/hardcodedSecret.js';
 import { unsafeLinkRule } from './analyzer/rules/unsafeLink.js';
 import type { ReviewEngine as ReviewEngineType } from './review/reviewEngine.js';
+import type { ReviewResult } from './review/reviewEngine.js';
 import { generateMarkdownReport } from './reporting/markdownReporter.js';
 import { SarvamProvider } from './ai/sarvamProvider.js';
 import { ReviewEngine } from './review/reviewEngine.js';
+import { generateJsonReport } from './reporting/jsonReporter.js';
+import { generateTerminalReport } from './reporting/terminalReporter.js';
 
 type CLIDependencies = {
   scanRepository: typeof defaultScanRepository;
   analyze: (files: SourceFile[]) => Finding[];
   reviewEngine?: Pick<ReviewEngineType, 'review'>;
 };
+
+function writeProgress(message: string): void {
+  if (process.stderr.isTTY) {
+    process.stderr.write(`${message}\n`);
+  }
+}
 
 export async function runCLI(
   args: string[],
@@ -42,6 +51,8 @@ export async function runCLI(
         'Options:',
         '  -h, --help       Show this help message',
         '  -v, --version    Show the installed version',
+        '  --format <format>  Report format: markdown or json (default: markdown)',
+        '  --output <path>    Save the report to a file instead of stdout',
         '',
         'Environment:',
         '  SARVAM_API_KEY   Optional API key for AI-assisted review',
@@ -57,6 +68,30 @@ export async function runCLI(
     ) as { version: string };
 
     process.stdout.write(`${packageJson.version}\n`);
+    return;
+  }
+
+  const formatIndex = args.indexOf('--format');
+  const format = formatIndex === -1 ? 'markdown' : args[formatIndex + 1];
+
+  if (formatIndex !== -1 && (!format || format.startsWith('--'))) {
+    process.stderr.write('Error: --format requires a value.\n');
+    process.exit(1);
+    return;
+  }
+
+  if (format !== 'markdown' && format !== 'json') {
+    process.stderr.write('Error: --format must be either markdown or json.\n');
+    process.exit(1);
+    return;
+  }
+
+  const outputIndex = args.indexOf('--output');
+  const outputPath = outputIndex === -1 ? undefined : args[outputIndex + 1];
+
+  if (outputIndex !== -1 && (!outputPath || outputPath.startsWith('--'))) {
+    process.stderr.write('Error: --output requires a file path.\n');
+    process.exit(1);
     return;
   }
 
@@ -82,6 +117,7 @@ export async function runCLI(
     return;
   }
 
+  writeProgress('Scanning repository...');
   const filePaths = await dependencies.scanRepository(absolutePath);
 
   const files: SourceFile[] = await Promise.all(
@@ -91,26 +127,52 @@ export async function runCLI(
     })),
   );
 
+  writeProgress('Analyzing files...');
   const findings = dependencies.analyze(files);
 
   const apiKey = process.env.SARVAM_API_KEY;
+  let reviewEngine = dependencies.reviewEngine;
 
-  const reviewEngine =
-    dependencies.reviewEngine ??
-    (apiKey
-      ? new ReviewEngine({
-          provider: new SarvamProvider({ apiKey }),
-        })
-      : undefined);
+  if (!reviewEngine && apiKey) {
+    writeProgress('Initializing AI review...');
+    reviewEngine = new ReviewEngine({
+      provider: new SarvamProvider({ apiKey }),
+    });
+  }
 
-  const result = reviewEngine
-    ? await reviewEngine.review({ files, findings })
-    : {
-        findings,
-        filesScanned: files.length,
-        durationMs: 0,
-      };
+  let result: ReviewResult;
 
-  const report = generateMarkdownReport(result);
-  process.stdout.write(`${report}\n`);
+  if (reviewEngine) {
+    writeProgress('Running AI review...');
+    result = await reviewEngine.review({ files, findings });
+  } else {
+    result = {
+      findings,
+      filesScanned: files.length,
+      durationMs: 0,
+    };
+  }
+
+  writeProgress('Generating report...');
+
+  if (outputPath) {
+    const report =
+      format === 'json'
+        ? generateJsonReport(result)
+        : generateMarkdownReport(result);
+
+    await writeFile(resolve(outputPath), `${report}\n`, 'utf8');
+    return;
+  }
+
+  if (format === 'json') {
+    process.stdout.write(`${generateJsonReport(result)}\n`);
+    return;
+  }
+
+  if (process.stdout.isTTY) {
+    process.stdout.write(`${generateTerminalReport(result)}\n`);
+  } else {
+    process.stdout.write(`${generateMarkdownReport(result)}\n`);
+  }
 }

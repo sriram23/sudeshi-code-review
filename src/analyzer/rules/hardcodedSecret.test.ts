@@ -19,7 +19,7 @@ describe('hardcodedSecretRule', () => {
         line: 1,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: `const apiKey = 'my-secret-key';`,
+        evidence: `const apiKey = '[REDACTED]';`,
         requiresAIReview: true,
       },
     ]);
@@ -41,7 +41,7 @@ describe('hardcodedSecretRule', () => {
         line: 1,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: `const password = 'my-password';`,
+        evidence: `const password = '[REDACTED]';`,
         requiresAIReview: true,
       },
     ]);
@@ -63,7 +63,7 @@ describe('hardcodedSecretRule', () => {
         line: 1,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: `const secret = 'my-secret';`,
+        evidence: `const secret = '[REDACTED]';`,
         requiresAIReview: true,
       },
     ]);
@@ -104,7 +104,7 @@ describe('hardcodedSecretRule', () => {
         line: 1,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: "const apiKey = 'first-secret';",
+        evidence: "const apiKey = '[REDACTED]';",
         requiresAIReview: true,
       },
       {
@@ -116,7 +116,7 @@ describe('hardcodedSecretRule', () => {
         line: 3,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: "const password = 'second-secret';",
+        evidence: "const password = '[REDACTED]';",
         requiresAIReview: true,
       },
       {
@@ -128,7 +128,7 @@ describe('hardcodedSecretRule', () => {
         line: 5,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: "const secret = 'third-secret';",
+        evidence: "const secret = '[REDACTED]';",
         requiresAIReview: true,
       },
     ]);
@@ -162,7 +162,7 @@ describe('hardcodedSecretRule', () => {
     expect(findings[0]).toMatchObject({
       rule: 'hardcoded-secret',
       line: 3,
-      evidence: "const secret = 'actual-secret';",
+      evidence: "const secret = '[REDACTED]';",
     });
   });
 
@@ -181,7 +181,7 @@ describe('hardcodedSecretRule', () => {
     expect(findings[0]).toMatchObject({
       rule: 'hardcoded-secret',
       line: 4,
-      evidence: "const password = 'actual-password';",
+      evidence: "const password = '[REDACTED]';",
     });
   });
 
@@ -201,7 +201,7 @@ describe('hardcodedSecretRule', () => {
         line: 1,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: `const accessToken = 'my-access-token-value';`,
+        evidence: `const accessToken = '[REDACTED]';`,
         requiresAIReview: true,
       },
     ]);
@@ -227,8 +227,7 @@ describe('hardcodedSecretRule', () => {
         line: 2,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence:
-          'paymentApiKey: "sk_test_FAKE_DEMO_KEY_DO_NOT_USE_123456789",',
+        evidence: 'paymentApiKey: "[REDACTED]",',
         requiresAIReview: true,
       },
     ]);
@@ -254,7 +253,7 @@ describe('hardcodedSecretRule', () => {
         line: 2,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence: 'internalToken: "demo_internal_token_not_a_real_secret",',
+        evidence: 'internalToken: "[REDACTED]",',
         requiresAIReview: true,
       },
     ]);
@@ -280,8 +279,7 @@ describe('hardcodedSecretRule', () => {
         line: 2,
         rule: 'hardcoded-secret',
         message: 'A hardcoded secret may be present',
-        evidence:
-          'databaseUrl: "postgres://demo_user:demo_password@localhost:5432/demo_db",',
+        evidence: 'databaseUrl: "[REDACTED]",',
         requiresAIReview: true,
       },
     ]);
@@ -310,7 +308,7 @@ describe('hardcodedSecretRule', () => {
     expect(findings[0]).toMatchObject({
       rule: 'hardcoded-secret',
       line: 1,
-      evidence: 'const apiKey = `static-template-secret`;',
+      evidence: 'const apiKey = `[REDACTED]`;',
     });
   });
 
@@ -342,7 +340,7 @@ describe('hardcodedSecretRule', () => {
       rule: 'hardcoded-secret',
       severity: 'high',
       line: 1,
-      evidence: String.raw`const apiKey = "prefix\"unique-secret-suffix";`,
+      evidence: String.raw`const apiKey = "[REDACTED]";`,
       requiresAIReview: true,
     });
   });
@@ -362,5 +360,39 @@ describe('hardcodedSecretRule', () => {
     });
 
     expect(findings).toEqual([]);
+  });
+  it('redacts a hardcoded secret from variable declaration evidence', () => {
+    const secret = 'test-secret-variable-123';
+    const findings = hardcodedSecretRule({
+      path: 'config.ts',
+      content: `const apiKey = '${secret}';`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].evidence).toContain('apiKey');
+    expect(findings[0].evidence).toContain('[REDACTED]');
+    expect(findings[0].evidence).not.toContain(secret);
+  });
+
+  it('redacts a hardcoded secret from object property evidence', () => {
+    const secret = 'test-secret-property-456';
+    const findings = hardcodedSecretRule({
+      path: 'config.ts',
+      content: `const config = { apiKey: '${secret}' };`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].evidence).toContain('apiKey');
+    expect(findings[0].evidence).toContain('[REDACTED]');
+    expect(findings[0].evidence).not.toContain(secret);
+  });
+
+  it('does not report an empty secret value', () => {
+    const findings = hardcodedSecretRule({
+      path: 'config.ts',
+      content: `const apiKey = '';`,
+    });
+
+    expect(findings).toHaveLength(0);
   });
 });
