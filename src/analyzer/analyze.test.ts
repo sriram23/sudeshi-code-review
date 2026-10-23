@@ -311,4 +311,78 @@ describe('analyze', () => {
       rule: 'unsafe-link',
     });
   });
+
+  it('deduplicates findings for the same rule, file, and line', () => {
+    const makeFinding = (rule: string, message: string) => ({
+      id: rule,
+      category: 'security' as const,
+      severity: 'high' as const,
+      confidence: 1,
+      file: 'src/App.tsx',
+      line: 12,
+      rule,
+      message,
+      requiresAIReview: false,
+    });
+
+    const firstRule: Rule = () => [
+      makeFinding('same-rule', 'First match'),
+      makeFinding('same-rule', 'Repeated match'),
+    ];
+    const secondRule: Rule = () => [
+      makeFinding('different-rule', 'Different rule at same location'),
+    ];
+
+    const findings = analyze(
+      [{ path: 'src/App.tsx', content: 'example' }],
+      [firstRule, secondRule],
+    );
+
+    expect(findings.map(({ rule, message }) => ({ rule, message }))).toEqual([
+      { rule: 'same-rule', message: 'First match' },
+      {
+        rule: 'different-rule',
+        message: 'Different rule at same location',
+      },
+    ]);
+  });
+
+  it('truncates oversized evidence while preserving concise evidence', () => {
+    const longEvidence = 'x'.repeat(5_000);
+    const rule: Rule = () => [
+      {
+        id: 'long-evidence',
+        category: 'security',
+        severity: 'high',
+        confidence: 1,
+        file: 'src/generated.js',
+        line: 1,
+        rule: 'long-evidence',
+        message: 'Evidence should be bounded',
+        evidence: longEvidence,
+        requiresAIReview: false,
+      },
+      {
+        id: 'short-evidence',
+        category: 'security',
+        severity: 'low',
+        confidence: 1,
+        file: 'src/App.tsx',
+        line: 2,
+        rule: 'short-evidence',
+        message: 'Short evidence stays intact',
+        evidence: 'const value = 1;',
+        requiresAIReview: false,
+      },
+    ];
+
+    const findings = analyze(
+      [{ path: 'src/App.tsx', content: 'example' }],
+      [rule],
+    );
+
+    expect(findings[0]?.evidence).toHaveLength(240);
+    expect(findings[0]?.evidence).toMatch(/… \[truncated\]$/);
+    expect(findings[1]?.evidence).toBe('const value = 1;');
+  });
 });

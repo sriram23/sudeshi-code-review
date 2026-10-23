@@ -116,4 +116,21 @@ describe('unsafeLinkRule', () => {
       },
     ]);
   });
+  
+it('does not treat a dangerous variable in another function as in scope', () => {
+  const findings = unsafeLinkRule({
+    path: 'src/components/UnsafeLink.tsx',
+    content: [
+      'function FirstComponent() {',
+      '  const destination = "javascript:alert(1)";',
+      '}',
+      'function SecondComponent() {',
+      '  return <a href={destination}>Open destination</a>;',
+      '}',
+    ].join('\n'),
+  });
+
+  expect(findings).toEqual([]);
+});
+
 });
