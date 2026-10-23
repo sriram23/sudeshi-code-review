@@ -13,6 +13,7 @@ import { generateMarkdownReport } from './reporting/markdownReporter.js';
 import { SarvamProvider } from './ai/sarvamProvider.js';
 import { ReviewEngine } from './review/reviewEngine.js';
 import { generateJsonReport } from './reporting/jsonReporter.js';
+import { generateTerminalReport } from './reporting/terminalReporter.js';
 
 type CLIDependencies = {
   scanRepository: typeof defaultScanRepository;
@@ -144,14 +145,24 @@ export async function runCLI(
         durationMs: 0,
       };
 
-  const report =
-    format === 'json'
-      ? generateJsonReport(result)
-      : generateMarkdownReport(result);
-
   if (outputPath) {
+    const report =
+      format === 'json'
+        ? generateJsonReport(result)
+        : generateMarkdownReport(result);
+
     await writeFile(resolve(outputPath), `${report}\n`, 'utf8');
+    return;
+  }
+
+  if (format === 'json') {
+    process.stdout.write(`${generateJsonReport(result)}\n`);
+    return;
+  }
+
+  if (process.stdout.isTTY) {
+    process.stdout.write(`${generateTerminalReport(result)}\n`);
   } else {
-    process.stdout.write(`${report}\n`);
+    process.stdout.write(`${generateMarkdownReport(result)}\n`);
   }
 }
