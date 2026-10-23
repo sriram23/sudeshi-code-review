@@ -1,4 +1,3 @@
-
 import ts from 'typescript';
 import type { Finding } from '../finding.js';
 import type { Rule } from '../rule.js';
@@ -16,40 +15,38 @@ export const unsafeLinkRule: Rule = (file) => {
 
   function isDangerousString(node: ts.Expression): boolean {
     return (
-      (ts.isStringLiteral(node) ||
-        ts.isNoSubstitutionTemplateLiteral(node)) &&
+      (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
       /^\s*javascript\s*:/i.test(node.text)
     );
   }
-function findVisibleDeclaration(
-  reference: ts.Identifier,
-): ts.VariableDeclaration | undefined {
-  let current: ts.Node | undefined = reference.parent;
+  function findVisibleDeclaration(
+    reference: ts.Identifier,
+  ): ts.VariableDeclaration | undefined {
+    let current: ts.Node | undefined = reference.parent;
 
-  while (current) {
-    if (ts.isBlock(current) || ts.isSourceFile(current)) {
-      for (const statement of current.statements) {
-        if (!ts.isVariableStatement(statement)) continue;
+    while (current) {
+      if (ts.isBlock(current) || ts.isSourceFile(current)) {
+        for (const statement of current.statements) {
+          if (!ts.isVariableStatement(statement)) continue;
 
-        for (const declaration of statement.declarationList.declarations) {
-          if (
-            ts.isIdentifier(declaration.name) &&
-            declaration.name.text === reference.text &&
-            declaration.initializer &&
-            declaration.getStart(sourceFile) < reference.getStart(sourceFile)
-          ) {
-            return declaration;
+          for (const declaration of statement.declarationList.declarations) {
+            if (
+              ts.isIdentifier(declaration.name) &&
+              declaration.name.text === reference.text &&
+              declaration.initializer &&
+              declaration.getStart(sourceFile) < reference.getStart(sourceFile)
+            ) {
+              return declaration;
+            }
           }
         }
       }
+
+      current = current.parent;
     }
 
-    current = current.parent;
+    return undefined;
   }
-
-  return undefined;
-}
-
 
   function visit(node: ts.Node): void {
     if (
@@ -70,7 +67,7 @@ function findVisibleDeclaration(
 
           dangerous = Boolean(
             declaration?.initializer &&
-              isDangerousString(declaration.initializer),
+            isDangerousString(declaration.initializer),
           );
         }
       }

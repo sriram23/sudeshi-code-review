@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { scanRepository as defaultScanRepository } from './scanner/scanRepository.js';
 import type { Finding } from './analyzer/finding.js';
@@ -12,6 +12,7 @@ import type { ReviewEngine as ReviewEngineType } from './review/reviewEngine.js'
 import { generateMarkdownReport } from './reporting/markdownReporter.js';
 import { SarvamProvider } from './ai/sarvamProvider.js';
 import { ReviewEngine } from './review/reviewEngine.js';
+import { generateJsonReport } from './reporting/jsonReporter.js';
 
 type CLIDependencies = {
   scanRepository: typeof defaultScanRepository;
@@ -42,6 +43,8 @@ export async function runCLI(
         'Options:',
         '  -h, --help       Show this help message',
         '  -v, --version    Show the installed version',
+        '  --format <format>  Report format: markdown or json (default: markdown)',
+        '  --output <path>    Save the report to a file instead of stdout',
         '',
         'Environment:',
         '  SARVAM_API_KEY   Optional API key for AI-assisted review',
@@ -57,6 +60,36 @@ export async function runCLI(
     ) as { version: string };
 
     process.stdout.write(`${packageJson.version}\n`);
+    return;
+  }
+
+  const formatIndex = args.indexOf('--format');
+  const format = formatIndex === -1 ? 'markdown' : args[formatIndex + 1];
+
+  if (formatIndex !== -1 && (!format || format.startsWith('--'))) {
+    process.stderr.write('Error: --format requires a value.\n');
+    process.exit(1);
+    return;
+  }
+
+  if (format !== 'markdown' && format !== 'json') {
+    process.stderr.write('Error: --format must be either markdown or json.\n');
+    process.exit(1);
+    return;
+  }
+
+  const outputIndex = args.indexOf('--output');
+  const outputPath = outputIndex === -1 ? undefined : args[outputIndex + 1];
+
+  if (outputIndex !== -1 && (!outputPath || outputPath.startsWith('--'))) {
+    process.stderr.write('Error: --output requires a file path.\n');
+    process.exit(1);
+    return;
+  }
+
+  if (formatIndex !== -1 && (!format || format.startsWith('--'))) {
+    process.stderr.write('Error: --format requires a value.\n');
+    process.exit(1);
     return;
   }
 
@@ -111,6 +144,14 @@ export async function runCLI(
         durationMs: 0,
       };
 
-  const report = generateMarkdownReport(result);
-  process.stdout.write(`${report}\n`);
+  const report =
+    format === 'json'
+      ? generateJsonReport(result)
+      : generateMarkdownReport(result);
+
+  if (outputPath) {
+    await writeFile(resolve(outputPath), `${report}\n`, 'utf8');
+  } else {
+    process.stdout.write(`${report}\n`);
+  }
 }
