@@ -9,6 +9,7 @@ import { dangerousHtmlRule } from './analyzer/rules/dangerousHtml.js';
 import { hardcodedSecretRule } from './analyzer/rules/hardcodedSecret.js';
 import { unsafeLinkRule } from './analyzer/rules/unsafeLink.js';
 import type { ReviewEngine as ReviewEngineType } from './review/reviewEngine.js';
+import type { ReviewResult } from './review/reviewEngine.js';
 import { generateMarkdownReport } from './reporting/markdownReporter.js';
 import { SarvamProvider } from './ai/sarvamProvider.js';
 import { ReviewEngine } from './review/reviewEngine.js';
@@ -20,6 +21,12 @@ type CLIDependencies = {
   analyze: (files: SourceFile[]) => Finding[];
   reviewEngine?: Pick<ReviewEngineType, 'review'>;
 };
+
+function writeProgress(message: string): void {
+  if (process.stderr.isTTY) {
+    process.stderr.write(`${message}\n`);
+  }
+}
 
 export async function runCLI(
   args: string[],
@@ -88,12 +95,6 @@ export async function runCLI(
     return;
   }
 
-  if (formatIndex !== -1 && (!format || format.startsWith('--'))) {
-    process.stderr.write('Error: --format requires a value.\n');
-    process.exit(1);
-    return;
-  }
-
   const repositoryPath = args[0];
 
   if (!repositoryPath) {
@@ -116,6 +117,7 @@ export async function runCLI(
     return;
   }
 
+  writeProgress('Scanning repository...');
   const filePaths = await dependencies.scanRepository(absolutePath);
 
   const files: SourceFile[] = await Promise.all(
@@ -125,25 +127,33 @@ export async function runCLI(
     })),
   );
 
+  writeProgress('Analyzing files...');
   const findings = dependencies.analyze(files);
 
   const apiKey = process.env.SARVAM_API_KEY;
+  let reviewEngine = dependencies.reviewEngine;
 
-  const reviewEngine =
-    dependencies.reviewEngine ??
-    (apiKey
-      ? new ReviewEngine({
-          provider: new SarvamProvider({ apiKey }),
-        })
-      : undefined);
+  if (!reviewEngine && apiKey) {
+    writeProgress('Initializing AI review...');
+    reviewEngine = new ReviewEngine({
+      provider: new SarvamProvider({ apiKey }),
+    });
+  }
 
-  const result = reviewEngine
-    ? await reviewEngine.review({ files, findings })
-    : {
-        findings,
-        filesScanned: files.length,
-        durationMs: 0,
-      };
+  let result: ReviewResult;
+
+  if (reviewEngine) {
+    writeProgress('Running AI review...');
+    result = await reviewEngine.review({ files, findings });
+  } else {
+    result = {
+      findings,
+      filesScanned: files.length,
+      durationMs: 0,
+    };
+  }
+
+  writeProgress('Generating report...');
 
   if (outputPath) {
     const report =

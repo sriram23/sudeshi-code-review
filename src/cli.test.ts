@@ -669,4 +669,110 @@ describe('CLI', () => {
       exit.mockRestore();
     }
   });
+  it('writes progress messages to stderr when running in a TTY', async () => {
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const originalIsTTY = Object.getOwnPropertyDescriptor(
+      process.stderr,
+      'isTTY',
+    );
+
+    Object.defineProperty(process.stderr, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+
+    const writeError = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI([repositoryPath, '--format', 'json'], {
+        scanRepository: vi.fn().mockResolvedValue([]),
+        analyze: vi.fn().mockReturnValue([]),
+        reviewEngine: {
+          review: vi.fn().mockResolvedValue({
+            findings: [],
+            filesScanned: 0,
+            durationMs: 1,
+          }),
+        },
+      });
+
+      expect(writeError.mock.calls.map(([chunk]) => String(chunk))).toEqual([
+        'Scanning repository...\n',
+        'Analyzing files...\n',
+        'Running AI review...\n',
+        'Generating report...\n',
+      ]);
+
+      const output = writeOutput.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join('');
+
+      expect(() => JSON.parse(output)).not.toThrow();
+    } finally {
+      writeError.mockRestore();
+      writeOutput.mockRestore();
+
+      if (originalIsTTY) {
+        Object.defineProperty(process.stderr, 'isTTY', originalIsTTY);
+      } else {
+        Reflect.deleteProperty(process.stderr, 'isTTY');
+      }
+
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
+  it('does not write progress messages when stderr is not a TTY', async () => {
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'sudeshi-review-'));
+    const originalIsTTY = Object.getOwnPropertyDescriptor(
+      process.stderr,
+      'isTTY',
+    );
+
+    Object.defineProperty(process.stderr, 'isTTY', {
+      configurable: true,
+      value: false,
+    });
+
+    const writeError = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const writeOutput = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    try {
+      const { runCLI } = await import('./cli.js');
+
+      await runCLI([repositoryPath, '--format', 'json'], {
+        scanRepository: vi.fn().mockResolvedValue([]),
+        analyze: vi.fn().mockReturnValue([]),
+      });
+
+      expect(writeError).not.toHaveBeenCalled();
+
+      const output = writeOutput.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join('');
+
+      expect(() => JSON.parse(output)).not.toThrow();
+    } finally {
+      writeError.mockRestore();
+      writeOutput.mockRestore();
+
+      if (originalIsTTY) {
+        Object.defineProperty(process.stderr, 'isTTY', originalIsTTY);
+      } else {
+        Reflect.deleteProperty(process.stderr, 'isTTY');
+      }
+
+      rmSync(repositoryPath, { recursive: true, force: true });
+    }
+  });
 });
