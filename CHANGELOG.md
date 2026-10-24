@@ -4,7 +4,34 @@ Notable user-facing changes are documented here.
 
 ## [Unreleased]
 
-Changes after the initial 1.0.0 release will be recorded here.
+Changes after the latest release will be recorded here.
+
+## [1.1.1] - 2026-10-24
+
+### Improved
+
+- Added color-coded terminal output for finding severity to make security issues easier to identify.
+- Improved terminal report formatting with clearer summaries, section separators, and finding details.
+- Added responsive line wrapping for long finding messages, file paths, and AI recommendations.
+- Respected terminal color support and the `NO_COLOR` environment variable.
+
+### Tests
+
+- Added coverage for terminal colors, report formatting, and line wrapping at constrained terminal widths.
+
+## [1.1.0] - 2026-10-23
+
+### Added
+
+- Added JSON report output and support for saving reports to a file.
+- Added CLI progress messages during repository scanning, analysis, and report generation.
+- Improved scan quality and reporting workflows.
+- Added safeguards to redact secret evidence in reports.
+
+### Improved
+
+- Improved the developer experience when running repository scans.
+- Refined reporting behavior for integration into development workflows.
 
 ## [1.0.0] - 2026-10-20
 
