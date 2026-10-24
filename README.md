@@ -52,6 +52,26 @@ sudeshi-code-review --version
 
 Provide a repository directory when running a scan. Review the report and validate findings before acting on them.
 
+### Terminal output
+
+Interactive terminals display a formatted summary with severity-colored findings and confidence details. Color output is automatically disabled when stdout is not an interactive terminal or when the `NO_COLOR` environment variable is set. JSON output remains machine-readable and contains no terminal styling.
+
+Disable terminal colors explicitly:
+
+**Git Bash**
+
+```bash
+export NO_COLOR=1
+sudeshi-code-review /path/to/repository
+```
+
+**PowerShell**
+
+```powershell
+$env:NO_COLOR = "1"
+sudeshi-code-review "C:\path\to\repository"
+```
+
 ## Optional AI-assisted review
 
 AI review is optional. Without `SARVAM_API_KEY`, the CLI uses its deterministic rules.
