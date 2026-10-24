@@ -101,7 +101,7 @@ export function generateTerminalReport(
 ): string {
   const color = options.color ?? shouldUseColor();
   const width = Math.max(
-    40,
+    1,
     Math.floor(options.width ?? process.stdout.columns ?? 80),
   );
   const divider = '─'.repeat(Math.min(width, 80));

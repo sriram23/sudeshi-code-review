@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { generateTerminalReport } from './terminalReporter.js';
 
 describe('generateTerminalReport', () => {
@@ -143,6 +143,36 @@ describe('generateTerminalReport', () => {
 
     for (const line of report.split('\n')) {
       expect(line.length).toBeLessThanOrEqual(40);
+    }
+  });
+  it('disables automatic colors when NO_COLOR is set', () => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      process.stdout,
+      'isTTY',
+    );
+
+    vi.stubEnv('NO_COLOR', '1');
+    Object.defineProperty(process.stdout, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+
+    try {
+      const report = generateTerminalReport({
+        findings: [],
+        filesScanned: 5,
+        durationMs: 1250,
+      });
+
+      expect(report).not.toContain('\u001b[');
+    } finally {
+      vi.unstubAllEnvs();
+
+      if (originalDescriptor) {
+        Object.defineProperty(process.stdout, 'isTTY', originalDescriptor);
+      } else {
+        Reflect.deleteProperty(process.stdout, 'isTTY');
+      }
     }
   });
 });
