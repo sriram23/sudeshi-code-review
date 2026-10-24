@@ -56,6 +56,7 @@ export async function runCLI(
         '',
         'Environment:',
         '  SARVAM_API_KEY   Optional API key for AI-assisted review',
+        '  NO_COLOR         Disable terminal colors when set',
         '',
       ].join('\n'),
     );
