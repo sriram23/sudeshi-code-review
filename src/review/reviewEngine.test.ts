@@ -4,6 +4,7 @@ import type { AIProvider } from '../ai/provider.js';
 import type { Finding } from '../analyzer/finding.js';
 import type { ReviewContext } from '../context/buildContext.js';
 import { type ReviewResult, ReviewEngine } from './reviewEngine.js';
+import { hardcodedSecretRule } from '../analyzer/rules/hardcodedSecret.js';
 
 describe('ReviewEngine', () => {
   it('defines a review result', () => {
@@ -300,6 +301,46 @@ describe('ReviewEngine', () => {
     expect(JSON.stringify(analyze.mock.calls)).not.toContain(
       'test-super-secret-value',
     );
+  });
+
+  it('redacts repeated values when rule evidence is already redacted', async () => {
+    const secret = 'test-repeated-source-secret-789';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: [
+        `const apiKey = '${secret}';`,
+        `// Documentation repeats the value: ${secret}`,
+        `const copiedValue = '${secret}';`,
+      ].join('\n'),
+    };
+
+    const [finding] = hardcodedSecretRule(sourceFile);
+    expect(finding).toBeDefined();
+    expect(finding?.evidence).not.toContain(secret);
+
+    // Exercise the complete AI-bound finding object, not only source context.
+    finding!.message = `Review this credential: ${secret}`;
+    const originalSource = sourceFile.content;
+    const originalFinding = structuredClone(finding!);
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding!] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0] ?? {});
+    expect(aiBoundRequest).not.toContain(secret);
+    expect(aiBoundRequest).toContain('[REDACTED]');
+
+    // Redaction must not mutate the caller's data.
+    expect(sourceFile.content).toBe(originalSource);
+    expect(finding).toEqual(originalFinding);
   });
 
   it('redacts a hardcoded secret wherever it appears in the source', async () => {

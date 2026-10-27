@@ -36,6 +36,7 @@ export class ReviewEngine {
   private redactHardcodedSecret(
     source: string,
     filePath = 'source.ts',
+    collectedSecretValues?: Set<string>,
   ): string {
     const scriptKind = filePath.endsWith('.tsx')
       ? ts.ScriptKind.TSX
@@ -57,6 +58,26 @@ export class ReviewEngine {
       /(?:api[_-]?key|password|secret|client[_-]?secret|token|database[_-]?url)/i;
 
     const edits: Array<{ start: number; end: number }> = [];
+    const secretValues = collectedSecretValues ?? new Set<string>();
+
+    function collectSecretValueParts(valueNode: ts.Node): void {
+      if (
+        ts.isStringLiteral(valueNode) ||
+        ts.isNoSubstitutionTemplateLiteral(valueNode)
+      ) {
+        if (valueNode.text && valueNode.text !== '[REDACTED]') {
+          secretValues.add(valueNode.text);
+        }
+
+        const rawValue = valueNode.getText(sourceFile).slice(1, -1);
+        if (rawValue && rawValue !== '[REDACTED]') {
+          secretValues.add(rawValue);
+        }
+      }
+
+      // Recursing also finds hardcoded literals inside template expressions.
+      ts.forEachChild(valueNode, collectSecretValueParts);
+    }
 
     function visit(node: ts.Node): void {
       let name: string | undefined;
@@ -82,6 +103,7 @@ export class ReviewEngine {
           start: initializer.getStart(sourceFile),
           end: initializer.getEnd(),
         });
+        collectSecretValueParts(initializer);
       }
 
       ts.forEachChild(node, visit);
@@ -89,16 +111,49 @@ export class ReviewEngine {
 
     visit(sourceFile);
 
+    const redactionToken = '\u0000SUDESHI_SECRET_REDACTED\u0000';
     let redactedSource = source;
 
     for (const edit of edits.sort((a, b) => b.start - a.start)) {
       redactedSource =
         redactedSource.slice(0, edit.start) +
-        "'[REDACTED]'" +
+        "'" +
+        redactionToken +
+        "'" +
         redactedSource.slice(edit.end);
     }
 
-    return redactedSource;
+    // The rule's evidence may already contain [REDACTED]. Collect literal
+    // values from the source so duplicate occurrences cannot bypass redaction.
+    const valuesToRedact = [...secretValues]
+      .filter((value) => value.length >= 4)
+      .sort((a, b) => b.length - a.length);
+
+    for (const value of valuesToRedact) {
+      redactedSource = redactedSource
+        .split(redactionToken)
+        .map((segment) => segment.replaceAll(value, redactionToken))
+        .join(redactionToken);
+    }
+
+    return redactedSource.replaceAll(redactionToken, '[REDACTED]');
+  }
+
+  private redactKnownSecretValues(
+    value: string,
+    secretValues: Set<string>,
+  ): string {
+    let redactedValue = value;
+
+    const valuesToRedact = [...secretValues]
+      .filter((secret) => secret.length >= 4 && secret !== '[REDACTED]')
+      .sort((a, b) => b.length - a.length);
+
+    for (const secret of valuesToRedact) {
+      redactedValue = redactedValue.replaceAll(secret, '[REDACTED]');
+    }
+
+    return redactedValue;
   }
 
   private redactSecretValue(source: string, finding: Finding): string {
@@ -138,20 +193,34 @@ export class ReviewEngine {
         continue;
       }
 
+      const secretValues = new Set<string>();
+
       const safeSourceFile = {
         ...sourceFile,
         content: this.redactSecretValue(
-          this.redactHardcodedSecret(sourceFile.content, sourceFile.path),
+          this.redactHardcodedSecret(
+            sourceFile.content,
+            sourceFile.path,
+            secretValues,
+          ),
           finding,
         ),
       };
 
       const safeFinding = {
         ...finding,
+        message: this.redactKnownSecretValues(finding.message, secretValues),
         ...(finding.evidence !== undefined && {
-          evidence: this.redactSecretValue(
-            this.redactHardcodedSecret(finding.evidence, sourceFile.path),
-            finding,
+          evidence: this.redactKnownSecretValues(
+            this.redactSecretValue(
+              this.redactHardcodedSecret(
+                finding.evidence,
+                sourceFile.path,
+                secretValues,
+              ),
+              finding,
+            ),
+            secretValues,
           ),
         }),
       };
