@@ -111,16 +111,6 @@ export class ReviewEngine {
         if (rawValue && rawValue !== '[REDACTED]') {
           secretValues.add(rawValue);
         }
-      } else if (
-        ts.isTemplateHead(valueNode) ||
-        ts.isTemplateMiddle(valueNode) ||
-        ts.isTemplateTail(valueNode)
-      ) {
-        // Static fragments inside interpolated templates can also be copied
-        // into comments, messages, or other source locations.
-        if (valueNode.text && valueNode.text !== '[REDACTED]') {
-          secretValues.add(valueNode.text);
-        }
       }
 
       // This also visits string literals nested inside template expressions.
@@ -236,6 +226,23 @@ export class ReviewEngine {
 
     function visit(node: ts.Node): void {
       if (
+        (ts.isTemplateHead(node) ||
+          ts.isTemplateMiddle(node) ||
+          ts.isTemplateTail(node)) &&
+        !node.text.includes(REDACTION_SENTINEL) &&
+        hasStandaloneSecret(node.text, secret)
+      ) {
+        // Replace only the static template chunk, preserving delimiters such
+        // as `${` and `}` so the resulting template remains syntactically valid.
+        const start = node.getStart(sourceFile) + 1;
+        const suffixLength = ts.isTemplateTail(node) ? 1 : 2;
+        const end = node.getEnd() - suffixLength;
+        edits.push({
+          start,
+          end,
+          replacement: REDACTION_SENTINEL,
+        });
+      } else if (
         (ts.isStringLiteral(node) ||
           ts.isNoSubstitutionTemplateLiteral(node)) &&
         !node.text.includes(REDACTION_SENTINEL) &&

@@ -461,6 +461,7 @@ describe('ReviewEngine', () => {
 
     expect(analyze).not.toHaveBeenCalled();
   });
+
   it('redacts clientSecret values before sending source to the AI provider', async () => {
     const secret = 'super-sensitive-client-secret';
 
@@ -508,6 +509,7 @@ describe('ReviewEngine', () => {
 
     expect(JSON.stringify(request)).not.toContain(secret);
   });
+
   it('reviews and redacts hardcoded secrets in object properties', async () => {
     const secret = 'test-payment-api-key-secret';
 
@@ -787,6 +789,7 @@ describe('ReviewEngine', () => {
 
     expect(aiBoundData).not.toContain(secretSuffix);
   });
+
   it('redacts secrets inside an interpolated template expression before AI review', async () => {
     const secret = 'interpolated-secret-123';
     const source = "const apiKey = `prefix-${'interpolated-secret-123'}`;";
@@ -857,6 +860,7 @@ describe('ReviewEngine', () => {
     expect(analyze).toHaveBeenCalledOnce();
     expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
   });
+
   it('redacts known secrets from existing AI-review metadata', async () => {
     const secret = 'test-existing-ai-review-secret-987';
     const sourceFile = {
@@ -912,6 +916,7 @@ describe('ReviewEngine', () => {
         [
           `const unrelatedValue = 'x${secret}x'; `,
           `const ${secret}Value = 'keep this identifier'; `,
+          'const copiedTemplate = `abc-${process.env.OTHER}`; ',
           'const internalToken = `prefix-${process.env.TOKEN}`;',
         ].join(''),
       ].join('\n'),
@@ -950,7 +955,10 @@ describe('ReviewEngine', () => {
     const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0]);
     expect(aiBoundRequest).not.toContain(`'${secret}'`);
     expect(aiBoundRequest).not.toContain(`standalone secret: ${secret}`);
-    expect(aiBoundRequest).not.toContain('template prefix: prefix-');
+    expect(aiBoundRequest).not.toContain('abc-${process.env.OTHER}');
+    expect(aiBoundRequest).toContain('[REDACTED]${process.env.OTHER}');
+    // An unrelated template fragment must not be treated as a secret globally.
+    expect(aiBoundRequest).toContain('template prefix: prefix-');
     // Avoid corrupting unrelated identifiers or longer string values.
     expect(aiBoundRequest).toContain(`x${secret}x`);
     expect(aiBoundRequest).toContain(`${secret}Value`);
