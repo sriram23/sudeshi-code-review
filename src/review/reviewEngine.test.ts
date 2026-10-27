@@ -4,6 +4,7 @@ import type { AIProvider } from '../ai/provider.js';
 import type { Finding } from '../analyzer/finding.js';
 import type { ReviewContext } from '../context/buildContext.js';
 import { type ReviewResult, ReviewEngine } from './reviewEngine.js';
+import { hardcodedSecretRule } from '../analyzer/rules/hardcodedSecret.js';
 
 describe('ReviewEngine', () => {
   it('defines a review result', () => {
@@ -302,6 +303,46 @@ describe('ReviewEngine', () => {
     );
   });
 
+  it('redacts repeated values when rule evidence is already redacted', async () => {
+    const secret = 'test-repeated-source-secret-789';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: [
+        `const apiKey = '${secret}';`,
+        `// Documentation repeats the value: ${secret}`,
+        `const copiedValue = '${secret}';`,
+      ].join('\n'),
+    };
+
+    const [finding] = hardcodedSecretRule(sourceFile);
+    expect(finding).toBeDefined();
+    expect(finding?.evidence).not.toContain(secret);
+
+    // Exercise the complete AI-bound finding object, not only source context.
+    finding!.message = `Review this credential: ${secret}`;
+    const originalSource = sourceFile.content;
+    const originalFinding = structuredClone(finding!);
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding!] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0] ?? {});
+    expect(aiBoundRequest).not.toContain(secret);
+    expect(aiBoundRequest).toContain('[REDACTED]');
+
+    // Redaction must not mutate the caller's data.
+    expect(sourceFile.content).toBe(originalSource);
+    expect(finding).toEqual(originalFinding);
+  });
+
   it('redacts a hardcoded secret wherever it appears in the source', async () => {
     const secret = 'test-super-secret-value';
     const finding: Finding = {
@@ -420,6 +461,7 @@ describe('ReviewEngine', () => {
 
     expect(analyze).not.toHaveBeenCalled();
   });
+
   it('redacts clientSecret values before sending source to the AI provider', async () => {
     const secret = 'super-sensitive-client-secret';
 
@@ -467,6 +509,7 @@ describe('ReviewEngine', () => {
 
     expect(JSON.stringify(request)).not.toContain(secret);
   });
+
   it('reviews and redacts hardcoded secrets in object properties', async () => {
     const secret = 'test-payment-api-key-secret';
 
@@ -746,6 +789,7 @@ describe('ReviewEngine', () => {
 
     expect(aiBoundData).not.toContain(secretSuffix);
   });
+
   it('redacts secrets inside an interpolated template expression before AI review', async () => {
     const secret = 'interpolated-secret-123';
     const source = "const apiKey = `prefix-${'interpolated-secret-123'}`;";
@@ -815,5 +859,208 @@ describe('ReviewEngine', () => {
 
     expect(analyze).toHaveBeenCalledOnce();
     expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+  });
+
+  it('redacts known secrets from existing AI-review metadata', async () => {
+    const secret = 'test-existing-ai-review-secret-987';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: `const apiKey = '${secret}';`,
+    };
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: "const apiKey = '[REDACTED]';",
+      requiresAIReview: true,
+      aiReview: {
+        valid: true,
+        confidence: 0.9,
+        reason: `Previous review exposed ${secret}.`,
+        recommendation: `Do not share ${secret} with external services.`,
+      },
+    };
+    const originalFinding = structuredClone(finding);
+    const originalSource = sourceFile.content;
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0]);
+    expect(aiBoundRequest).not.toContain(secret);
+    expect(aiBoundRequest).toContain('[REDACTED]');
+    expect(finding).toEqual(originalFinding);
+    expect(sourceFile.content).toBe(originalSource);
+  });
+
+  it('redacts short secret values in repeated literals and bounded comments', async () => {
+    const secret = 'abc';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: [
+        `const apiKey = '${secret}';`,
+        `const copiedValue = '${secret}';`,
+        `// standalone secret: ${secret}; template prefix: prefix-`,
+        [
+          `const unrelatedValue = 'x${secret}x'; `,
+          `const ${secret}Value = 'keep this identifier'; `,
+          'const copiedTemplate = `abc-${process.env.OTHER}`; ',
+          'const internalToken = `prefix-${process.env.TOKEN}`;',
+        ].join(''),
+      ].join('\n'),
+    };
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: "const apiKey = '[REDACTED]';",
+      requiresAIReview: true,
+      aiReview: {
+        valid: true,
+        confidence: 0.9,
+        reason: `A previous review mentioned ${secret}.`,
+        recommendation: `Avoid exposing ${secret} to an AI provider.`,
+      },
+    };
+    const originalSource = sourceFile.content;
+    const originalFinding = structuredClone(finding);
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0]);
+    expect(aiBoundRequest).not.toContain(`'${secret}'`);
+    expect(aiBoundRequest).not.toContain(`standalone secret: ${secret}`);
+    expect(aiBoundRequest).not.toContain('abc-${process.env.OTHER}');
+    expect(aiBoundRequest).toContain('[REDACTED]${process.env.OTHER}');
+    // An unrelated template fragment must not be treated as a secret globally.
+    expect(aiBoundRequest).toContain('template prefix: prefix-');
+    // Avoid corrupting unrelated identifiers or longer string values.
+    expect(aiBoundRequest).toContain(`x${secret}x`);
+    expect(aiBoundRequest).toContain(`${secret}Value`);
+    expect(aiBoundRequest).not.toContain(`previous review mentioned ${secret}`);
+    expect(aiBoundRequest).not.toContain(`Avoid exposing ${secret}`);
+    expect(sourceFile.content).toBe(originalSource);
+    expect(finding).toEqual(originalFinding);
+  });
+  it('redacts known secrets when source contains malformed syntax', async () => {
+    const secret = 'malformed-source-secret-456';
+
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: [
+        `const apiKey = '${secret}';`,
+        'const broken = { value: ;',
+        `// Repeated value: ${secret}`,
+      ].join('\n'),
+    };
+
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: sourceFile.path,
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: `const apiKey = '${secret}';`,
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await expect(
+      engine.review({
+        files: [sourceFile],
+        findings: [finding],
+      }),
+    ).resolves.toMatchObject({
+      filesScanned: 1,
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+
+    // Redaction must not mutate the original source.
+    expect(sourceFile.content).toContain(secret);
+  });
+
+  it('avoids overlapping edits for nested secret assignments', async () => {
+    const secret = 'nested-token-secret-456';
+    const sensitiveSuffix = 'LEAKTAIL_LEAKTAIL_LEAKTAIL_LEAKTAIL';
+    const source =
+      "const apiKey = `prefix-${(() => { const token = '" +
+      secret +
+      "'; return token; })()}-" +
+      sensitiveSuffix +
+      '`;';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: source,
+    };
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: sourceFile.path,
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: `const token = '${secret}';`,
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0]);
+    expect(aiBoundRequest).not.toContain(secret);
+    expect(aiBoundRequest).not.toContain('prefix-');
+    expect(aiBoundRequest).not.toContain(sensitiveSuffix);
+    expect(aiBoundRequest).not.toContain('LEAKTAIL');
+    expect(aiBoundRequest).toContain('[REDACTED]');
+    expect(sourceFile.content).toBe(source);
+    expect(finding.evidence).toBe(`const token = '${secret}';`);
   });
 });

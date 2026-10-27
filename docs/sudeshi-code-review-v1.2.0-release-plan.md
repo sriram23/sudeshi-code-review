@@ -1,11 +1,11 @@
 # Sudeshi Code Review — v1.2.0 Release Plan
 
-**Status:** Proposed plan for freeze  
-**Current version:** `v1.1.1`  
-**Target version:** `v1.2.0`  
-**Release theme:** Security hardening and trustworthy findings  
-**Estimated duration:** 4 weeks  
-**Time budget:** 2 hours per week  
+**Status:** Proposed plan for freeze
+**Current version:** `v1.1.1`
+**Target version:** `v1.2.0`
+**Release theme:** Security hardening and trustworthy findings
+**Estimated duration:** 4 weeks
+**Time budget:** 2 hours per week
 **Release type:** Minor release
 
 ## 1. Release Objective
@@ -23,6 +23,7 @@ Make the existing security-scanning workflow more trustworthy by hardening AI-co
 The repository already has AST-based redaction and tests covering several secret patterns. Strengthen the existing implementation rather than replacing it without evidence.
 
 **Work included:**
+
 - Audit redaction of secret-like variable assignments and object properties.
 - Test single- and double-quoted strings, static template literals, and interpolated template literals.
 - Verify repeated occurrences of detected secret values are redacted from AI-bound context.
@@ -32,6 +33,7 @@ The repository already has AST-based redaction and tests covering several secret
 - Update the README and changelog to describe the actual protection and its limitations.
 
 **Acceptance criteria**
+
 - [ ] Regression tests cover the supported secret patterns.
 - [ ] Tests inspect the actual payload passed to the mocked AI provider.
 - [ ] Tests verify known secret values do not appear in that payload.
@@ -45,13 +47,14 @@ The repository already has AST-based redaction and tests covering several secret
 
 Focus on the three existing rules:
 
-| Rule | Scope |
-| --- | --- |
+| Rule               | Scope                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------- |
 | `hardcoded-secret` | Detection accuracy, redacted evidence, and safe handling of supported secret patterns |
-| `dangerous-html` | Detect risky HTML insertion without treating every use as a confirmed exploit |
-| `unsafe-link` | Reliable detection of JavaScript URLs in supported JSX link patterns |
+| `dangerous-html`   | Detect risky HTML insertion without treating every use as a confirmed exploit         |
+| `unsafe-link`      | Reliable detection of JavaScript URLs in supported JSX link patterns                  |
 
 **Work included:**
+
 - Review implementation and current test coverage.
 - Add missing vulnerable and safe fixtures.
 - Fix confirmed bugs or misleading findings.
@@ -59,6 +62,7 @@ Focus on the three existing rules:
 - Preserve cautious security claims.
 
 **Acceptance criteria**
+
 - [ ] Each rule has tests for representative vulnerable and safe examples.
 - [ ] Known false-positive cases are covered by regression tests where applicable.
 - [ ] Findings point to the expected source location.
@@ -72,12 +76,14 @@ Focus on the three existing rules:
 Use the existing evaluation suite as the release safety net.
 
 **Work included:**
+
 - Add missing regression fixtures identified during the rule audit.
 - Include realistic React and TypeScript examples.
 - Verify clean examples do not produce unexpected findings.
 - Keep tests deterministic and independent of live AI services.
 
 **Acceptance criteria**
+
 - [ ] Every bug fixed in this release has a regression test.
 - [ ] The evaluation suite covers all three existing rules.
 - [ ] Tests run locally without requiring a Sarvam API key.
@@ -88,6 +94,7 @@ Use the existing evaluation suite as the release safety net.
 The CLI imports TypeScript at runtime to parse source files. Therefore, **do not move TypeScript into `devDependencies` merely to improve a package-health score**.
 
 Verify:
+
 - Runtime dependencies are necessary and appropriately declared.
 - The published package contains the required compiled files.
 - Global installation and `npx` execution work.
@@ -95,6 +102,7 @@ Verify:
 - The package runs without development dependencies being installed separately.
 
 **Acceptance criteria**
+
 - [ ] Dependency changes, if any, have a concrete technical justification.
 - [ ] `npm pack --dry-run` succeeds.
 - [ ] A clean installation can execute the CLI successfully.
@@ -120,12 +128,12 @@ Put unrelated improvements on the backlog instead of expanding this release.
 
 With two hours per week, keep each week's scope small.
 
-| Week | Time | Task | Deliverable |
-| --- | ---: | --- | --- |
-| **1** | 2 hours | Inspect redaction code, existing tests, and three rules | Prioritised list of confirmed gaps and selected fixes |
-| **2** | 2 hours | Fix the highest-priority redaction issue and add regression tests | Hardened redaction with tests |
-| **3** | 2 hours | Audit the three rules and strengthen evaluation fixtures | Rule-quality fixes and regression coverage |
-| **4** | 2 hours | Run validation, audit packaging, update documentation, and prepare release | Release candidate and release checklist |
+| Week  |    Time | Task                                                                       | Deliverable                                           |
+| ----- | ------: | -------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **1** | 2 hours | Inspect redaction code, existing tests, and three rules                    | Prioritised list of confirmed gaps and selected fixes |
+| **2** | 2 hours | Fix the highest-priority redaction issue and add regression tests          | Hardened redaction with tests                         |
+| **3** | 2 hours | Audit the three rules and strengthen evaluation fixtures                   | Rule-quality fixes and regression coverage            |
+| **4** | 2 hours | Run validation, audit packaging, update documentation, and prepare release | Release candidate and release checklist               |
 
 If the redaction audit reveals a more substantial problem than can be safely fixed in the allocated time, **delay the release rather than ship a partial security fix disguised as complete protection**.
 
@@ -134,12 +142,14 @@ If the redaction audit reveals a more substantial problem than can be safely fix
 Do not publish v1.2.0 until all gates are satisfied.
 
 ### Code Quality
+
 - [ ] `npm run format:check`
 - [ ] `npm run lint`
 - [ ] `npm test`
 - [ ] `npm run build`
 
 ### Security
+
 - [ ] Redaction regression tests pass.
 - [ ] All three rule suites pass.
 - [ ] Evaluation tests pass.
@@ -147,12 +157,14 @@ Do not publish v1.2.0 until all gates are satisfied.
 - [ ] Documentation does not overstate security guarantees.
 
 ### Packaging
+
 - [ ] `npm pack --dry-run` succeeds.
 - [ ] A clean install and CLI smoke test succeed.
 - [ ] `package.json`, `CHANGELOG.md`, and README agree on delivered functionality.
 - [ ] Version is consistently set to `1.2.0` in the release commit.
 
 ### Publishing
+
 - [ ] Changes are merged into `main`.
 - [ ] Git tag `v1.2.0` points to the intended release commit.
 - [ ] GitHub release notes describe the actual changes.

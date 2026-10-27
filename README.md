@@ -113,7 +113,7 @@ Sudeshi Code Review is a focused static-analysis tool—not a complete security 
 - Detection is limited to the currently implemented JavaScript and TypeScript rules.
 - A clean report does not establish that a repository is secure.
 - AI assessments can be inaccurate and require human review.
-- Source-context redaction before AI analysis has limitations, particularly with interpolated template literals. Do not assume all sensitive source content will be removed before it is sent to an AI provider.
+- AI-context redaction is best-effort. It redacts recognized secret values in supported code patterns and selected repeated occurrences, but cannot guarantee that every secret will be detected or removed. Dynamically constructed values and syntax the implementation does not recognize may still be sent to the configured AI provider.
 - Review the privacy implications before enabling AI review on private or sensitive repositories.
 
 ## Development
