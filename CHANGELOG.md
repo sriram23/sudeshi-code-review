@@ -4,6 +4,12 @@ Notable user-facing changes are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Hardened AI-review context redaction for recognized secret values, repeated occurrences, and existing AI-review metadata.
+- Added regression coverage for short secret values, interpolated templates, and malformed source syntax.
+- Clarified that redaction remains best-effort and cannot guarantee detection or removal of every secret.
+
 Changes after the latest release will be recorded here.
 
 ## [1.1.1] - 2026-10-24

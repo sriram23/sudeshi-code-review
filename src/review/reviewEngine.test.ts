@@ -967,4 +967,53 @@ describe('ReviewEngine', () => {
     expect(sourceFile.content).toBe(originalSource);
     expect(finding).toEqual(originalFinding);
   });
+  it('redacts known secrets when source contains malformed syntax', async () => {
+    const secret = 'malformed-source-secret-456';
+
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: [
+        `const apiKey = '${secret}';`,
+        'const broken = { value: ;',
+        `// Repeated value: ${secret}`,
+      ].join('\n'),
+    };
+
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: sourceFile.path,
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: `const apiKey = '${secret}';`,
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await expect(
+      engine.review({
+        files: [sourceFile],
+        findings: [finding],
+      }),
+    ).resolves.toMatchObject({
+      filesScanned: 1,
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
+
+    // Redaction must not mutate the original source.
+    expect(sourceFile.content).toContain(secret);
+  });
 });
