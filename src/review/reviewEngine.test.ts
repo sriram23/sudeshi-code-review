@@ -857,4 +857,106 @@ describe('ReviewEngine', () => {
     expect(analyze).toHaveBeenCalledOnce();
     expect(JSON.stringify(analyze.mock.calls)).not.toContain(secret);
   });
+  it('redacts known secrets from existing AI-review metadata', async () => {
+    const secret = 'test-existing-ai-review-secret-987';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: `const apiKey = '${secret}';`,
+    };
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: "const apiKey = '[REDACTED]';",
+      requiresAIReview: true,
+      aiReview: {
+        valid: true,
+        confidence: 0.9,
+        reason: `Previous review exposed ${secret}.`,
+        recommendation: `Do not share ${secret} with external services.`,
+      },
+    };
+    const originalFinding = structuredClone(finding);
+    const originalSource = sourceFile.content;
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0]);
+    expect(aiBoundRequest).not.toContain(secret);
+    expect(aiBoundRequest).toContain('[REDACTED]');
+    expect(finding).toEqual(originalFinding);
+    expect(sourceFile.content).toBe(originalSource);
+  });
+
+  it('redacts short secret values in repeated literals and bounded comments', async () => {
+    const secret = 'abc';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: [
+        `const apiKey = '${secret}';`,
+        `const copiedValue = '${secret}';`,
+        `// standalone secret: ${secret}; template prefix: prefix-`,
+        [
+          `const unrelatedValue = 'x${secret}x'; `,
+          `const ${secret}Value = 'keep this identifier'; `,
+          'const internalToken = `prefix-${process.env.TOKEN}`;',
+        ].join(''),
+      ].join('\n'),
+    };
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: 'src/config.ts',
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: "const apiKey = '[REDACTED]';",
+      requiresAIReview: true,
+      aiReview: {
+        valid: true,
+        confidence: 0.9,
+        reason: `A previous review mentioned ${secret}.`,
+        recommendation: `Avoid exposing ${secret} to an AI provider.`,
+      },
+    };
+    const originalSource = sourceFile.content;
+    const originalFinding = structuredClone(finding);
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0]);
+    expect(aiBoundRequest).not.toContain(`'${secret}'`);
+    expect(aiBoundRequest).not.toContain(`standalone secret: ${secret}`);
+    expect(aiBoundRequest).not.toContain('template prefix: prefix-');
+    // Avoid corrupting unrelated identifiers or longer string values.
+    expect(aiBoundRequest).toContain(`x${secret}x`);
+    expect(aiBoundRequest).toContain(`${secret}Value`);
+    expect(aiBoundRequest).not.toContain(`previous review mentioned ${secret}`);
+    expect(aiBoundRequest).not.toContain(`Avoid exposing ${secret}`);
+    expect(sourceFile.content).toBe(originalSource);
+    expect(finding).toEqual(originalFinding);
+  });
 });
