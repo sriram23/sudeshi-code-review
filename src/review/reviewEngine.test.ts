@@ -1016,4 +1016,51 @@ describe('ReviewEngine', () => {
     // Redaction must not mutate the original source.
     expect(sourceFile.content).toContain(secret);
   });
+
+  it('avoids overlapping edits for nested secret assignments', async () => {
+    const secret = 'nested-token-secret-456';
+    const sensitiveSuffix = 'LEAKTAIL_LEAKTAIL_LEAKTAIL_LEAKTAIL';
+    const source =
+      "const apiKey = `prefix-${(() => { const token = '" +
+      secret +
+      "'; return token; })()}-" +
+      sensitiveSuffix +
+      '`;';
+    const sourceFile = {
+      path: 'src/config.ts',
+      content: source,
+    };
+    const finding: Finding = {
+      id: 'hardcoded-secret',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: sourceFile.path,
+      line: 1,
+      rule: 'hardcoded-secret',
+      message: 'A hardcoded secret may be present',
+      evidence: `const token = '${secret}';`,
+      requiresAIReview: true,
+    };
+
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Use an environment variable.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0]);
+    expect(aiBoundRequest).not.toContain(secret);
+    expect(aiBoundRequest).not.toContain('prefix-');
+    expect(aiBoundRequest).not.toContain(sensitiveSuffix);
+    expect(aiBoundRequest).not.toContain('LEAKTAIL');
+    expect(aiBoundRequest).toContain('[REDACTED]');
+    expect(sourceFile.content).toBe(source);
+    expect(finding.evidence).toBe(`const token = '${secret}';`);
+  });
 });

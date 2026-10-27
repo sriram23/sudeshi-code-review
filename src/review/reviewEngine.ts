@@ -137,10 +137,24 @@ export class ReviewEngine {
           ts.isNoSubstitutionTemplateLiteral(initializer) ||
           ts.isTemplateExpression(initializer))
       ) {
-        edits.push({
+        const edit = {
           start: initializer.getStart(sourceFile),
           end: initializer.getEnd(),
-        });
+        };
+
+        // The AST traversal is parent-first. If this initializer overlaps an
+        // edit already selected for an outer secret initializer, do not add a
+        // second edit: applying overlapping ranges with original offsets can
+        // leave part of the outer template in the AI-bound source. Still
+        // collect nested literals so repeated values can be redacted elsewhere.
+        const overlapsExistingEdit = edits.some(
+          (existing) => edit.start < existing.end && existing.start < edit.end,
+        );
+
+        if (!overlapsExistingEdit) {
+          edits.push(edit);
+        }
+
         collectSecretValueParts(initializer);
       }
 
