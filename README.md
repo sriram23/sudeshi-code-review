@@ -4,7 +4,7 @@ A TypeScript and React code-review CLI that scans JavaScript and TypeScript repo
 
 ## Features
 
-- Scans JavaScript and TypeScript repositories.
+- Scans JavaScript and TypeScript repositories, including JSX and TSX source files.
 - Detects selected dangerous HTML insertion patterns, hardcoded secrets, and JavaScript URLs in JSX links.
 - Reports findings with severity and evidence in Markdown.
 - Works without an AI API key using deterministic rules.
@@ -102,7 +102,15 @@ When AI review is enabled, selected source context is sent to Sarvam AI for anal
 | `hardcoded-secret` | Detects selected hardcoded credential patterns.   |
 | `unsafe-link`      | Detects JavaScript URLs in JSX link targets.      |
 
-These rules cover selected patterns, not every possible instance of these issues.
+These rules cover selected patterns, not every possible instance of these issues. Repository scanning supports `.js`, `.jsx`, `.ts`, and `.tsx` source files.
+
+### Detection scope and interpretation
+
+- **`dangerous-html`:** Flags selected uses of `dangerouslySetInnerHTML`. The rule detects the HTML-insertion sink; it does not establish that the supplied value is attacker-controlled or prove that an exploitable XSS vulnerability exists. A narrowly scoped static JSON-LD case is exempted by the rule.
+- **`hardcoded-secret`:** Detects non-empty static strings and static template literals assigned to supported secret-like variable names or object-property keys. Database URL values are flagged when they contain embedded username and password credentials. Detected secret literals are redacted from finding evidence, but arbitrary secret formats and dynamically constructed values are outside the rule's coverage.
+- **`unsafe-link`:** Detects statically identifiable `javascript:` URLs in JSX `href` attributes, including direct string expressions, static template expressions, and supported locally resolvable variable values. It does not perform comprehensive data-flow analysis of dynamic values.
+
+Finding severity describes the potential impact of a matched pattern. Rule confidence describes confidence in the pattern match; neither value proves exploitability or attacker control. Review the source context before treating a finding as a confirmed vulnerability.
 
 ## Limitations and responsible use
 

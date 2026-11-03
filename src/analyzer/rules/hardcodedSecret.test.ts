@@ -395,4 +395,87 @@ describe('hardcodedSecretRule', () => {
 
     expect(findings).toHaveLength(0);
   });
+
+  it('ignores database URL variable declarations without embedded credentials', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: `const databaseUrl = 'postgres://localhost:5432/demo_db';`,
+    });
+
+    expect(findings).toEqual([]);
+  });
+
+  it('detects and redacts credentials in database URL variable declarations', () => {
+    const databaseUrl =
+      'postgres://demo_user:demo_password@localhost:5432/demo_db';
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: `const databaseUrl = '${databaseUrl}';`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'hardcoded-secret',
+      line: 1,
+      evidence: `const databaseUrl = '[REDACTED]';`,
+    });
+    expect(findings[0]?.evidence).not.toContain('demo_password');
+  });
+
+  it('redacts every detected secret literal on the same evidence line', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content:
+        'const label = "shared-secret"; ' +
+        "const apiKey = 'shared-secret', password = 'second-secret';",
+    });
+
+    expect(findings).toHaveLength(2);
+    expect(findings[0]?.evidence).toBe(
+      'const label = "[REDACTED]"; ' +
+        "const apiKey = '[REDACTED]', password = '[REDACTED]';",
+    );
+    expect(findings[1]?.evidence).toBe(findings[0]?.evidence);
+    expect(findings[0]?.evidence).not.toContain('shared-secret');
+    expect(findings[0]?.evidence).not.toContain('second-secret');
+  });
+
+  it('parses JavaScript source files', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.js',
+      content: `const apiKey = 'javascript-secret';`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.evidence).toBe(`const apiKey = '[REDACTED]';`);
+  });
+
+  it('redacts the visible part of a multiline static template literal', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        'const apiKey = `first-line-secret',
+        'second-line-secret`;',
+      ].join('\n'),
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.evidence).toContain('[REDACTED]');
+    expect(findings[0]?.evidence).not.toContain('first-line-secret');
+  });
+
+  it('detects secrets in quoted and statically computed object properties', () => {
+    const findings = hardcodedSecretRule({
+      path: 'src/config.ts',
+      content: [
+        `const config = { "apiKey": 'quoted-secret', ['password']: 'computed-secret' };`,
+      ].join('\n'),
+    });
+
+    expect(findings).toHaveLength(2);
+    expect(findings[0]?.evidence).toContain('"apiKey": \'[REDACTED]\'');
+    expect(findings[1]?.evidence).toContain("['password']: '[REDACTED]'");
+    expect(findings[0]?.evidence).not.toContain('quoted-secret');
+    expect(findings[1]?.evidence).not.toContain('computed-secret');
+  });
 });

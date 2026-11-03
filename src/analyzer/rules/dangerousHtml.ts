@@ -2,17 +2,12 @@ import ts from 'typescript';
 import type { Finding } from '../finding.js';
 import type { SourceFile } from '../sourceFile.js';
 import type { Rule } from '../rule.js';
+import { createSourceFile } from '../createSourceFile.js';
 
 export const dangerousHtmlRule: Rule = (file: SourceFile) => {
   const lines = file.content.split('\n');
   const findings: Finding[] = [];
-  const sourceFile = ts.createSourceFile(
-    file.path,
-    file.content,
-    ts.ScriptTarget.Latest,
-    true,
-    file.path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const sourceFile = createSourceFile(file.path, file.content);
 
   function findDeclarationInScope(
     node: ts.Node,
