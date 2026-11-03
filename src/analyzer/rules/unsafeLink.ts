@@ -1,24 +1,74 @@
 import ts from 'typescript';
 import type { Finding } from '../finding.js';
 import type { Rule } from '../rule.js';
+import { createSourceFile } from '../createSourceFile.js';
 
 export const unsafeLinkRule: Rule = (file) => {
   const findings: Finding[] = [];
+  const sourceFile = createSourceFile(file.path, file.content);
 
-  const sourceFile = ts.createSourceFile(
-    file.path,
-    file.content,
-    ts.ScriptTarget.Latest,
-    true,
-    file.path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  function unwrapParentheses(node: ts.Expression): ts.Expression {
+    let expression = node;
+
+    while (ts.isParenthesizedExpression(expression)) {
+      expression = expression.expression;
+    }
+
+    return expression;
+  }
 
   function isDangerousString(node: ts.Expression): boolean {
-    return (
-      (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
-      /^\s*javascript\s*:/i.test(node.text)
+    const expression = unwrapParentheses(node);
+
+    if (
+      !ts.isStringLiteral(expression) &&
+      !ts.isNoSubstitutionTemplateLiteral(expression)
+    ) {
+      return false;
+    }
+
+    // The URL parser removes ASCII tabs and newlines before scheme parsing,
+    // but an ordinary space inside the scheme makes it a different URL.
+    const normalizedValue = expression.text.replace(/[\t\n\r]/g, '');
+
+    return /^\s*javascript:/i.test(normalizedValue);
+  }
+
+  function bindingContainsName(
+    bindingName: ts.BindingName,
+    name: string,
+  ): boolean {
+    if (ts.isIdentifier(bindingName)) {
+      return bindingName.text === name;
+    }
+
+    return bindingName.elements.some(
+      (element) =>
+        ts.isBindingElement(element) && bindingContainsName(element.name, name),
     );
   }
+
+  function isFunctionLike(
+    node: ts.Node,
+  ): node is
+    | ts.FunctionDeclaration
+    | ts.FunctionExpression
+    | ts.ArrowFunction
+    | ts.MethodDeclaration
+    | ts.ConstructorDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration {
+    return (
+      ts.isFunctionDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isArrowFunction(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isConstructorDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node)
+    );
+  }
+
   function findVisibleDeclaration(
     reference: ts.Identifier,
   ): ts.VariableDeclaration | undefined {
@@ -26,20 +76,40 @@ export const unsafeLinkRule: Rule = (file) => {
 
     while (current) {
       if (ts.isBlock(current) || ts.isSourceFile(current)) {
-        for (const statement of current.statements) {
-          if (!ts.isVariableStatement(statement)) continue;
-
-          for (const declaration of statement.declarationList.declarations) {
-            if (
-              ts.isIdentifier(declaration.name) &&
-              declaration.name.text === reference.text &&
-              declaration.initializer &&
-              declaration.getStart(sourceFile) < reference.getStart(sourceFile)
-            ) {
-              return declaration;
-            }
+        const declarations = current.statements.flatMap((statement) => {
+          if (!ts.isVariableStatement(statement)) {
+            return [];
           }
+
+          return statement.declarationList.declarations.filter(
+            (declaration) =>
+              ts.isIdentifier(declaration.name) &&
+              declaration.name.text === reference.text,
+          );
+        });
+
+        if (declarations.length > 0) {
+          const precedingDeclaration = declarations
+            .filter(
+              (declaration) =>
+                declaration.getStart(sourceFile) <
+                reference.getStart(sourceFile),
+            )
+            .at(-1);
+
+          // A later declaration still shadows outer bindings in this scope.
+          return precedingDeclaration;
         }
+      }
+
+      if (
+        isFunctionLike(current) &&
+        current.parameters.some((parameter) =>
+          bindingContainsName(parameter.name, reference.text),
+        )
+      ) {
+        // A parameter shadows same-named declarations in outer scopes.
+        return undefined;
       }
 
       current = current.parent;
@@ -58,11 +128,16 @@ export const unsafeLinkRule: Rule = (file) => {
       let dangerous = false;
 
       if (ts.isStringLiteral(node.initializer)) {
-        dangerous = /^\s*javascript\s*:/i.test(node.initializer.text);
-      } else if (ts.isJsxExpression(node.initializer)) {
-        const expression = node.initializer.expression;
+        dangerous = isDangerousString(node.initializer);
+      } else if (
+        ts.isJsxExpression(node.initializer) &&
+        node.initializer.expression
+      ) {
+        const expression = unwrapParentheses(node.initializer.expression);
 
-        if (expression && ts.isIdentifier(expression)) {
+        if (isDangerousString(expression)) {
+          dangerous = true;
+        } else if (ts.isIdentifier(expression)) {
           const declaration = findVisibleDeclaration(expression);
 
           dangerous = Boolean(
@@ -86,7 +161,7 @@ export const unsafeLinkRule: Rule = (file) => {
           line: line + 1,
           rule: 'unsafe-link',
           message: 'JavaScript URLs in links can execute code when activated.',
-          evidence: file.content.split('\n')[line]?.trim() ?? '',
+          evidence: file.content.split(/\r?\n/)[line]?.trim() ?? '',
           requiresAIReview: true,
         });
       }
