@@ -9,6 +9,10 @@ Notable user-facing changes are documented here.
 - Hardened AI-review context redaction for recognized secret values, repeated occurrences, and existing AI-review metadata.
 - Added regression coverage for short secret values, interpolated templates, and malformed source syntax.
 - Clarified that redaction remains best-effort and cannot guarantee detection or removal of every secret.
+- Improved `hardcoded-secret` detection for credentialed database URLs and quoted or statically computed object-property keys; finding evidence now redacts all detected secret literals on the affected source line.
+- Improved `unsafe-link` detection for JavaScript URLs in direct JSX string expressions and static template expressions, and avoided resolving shadowed outer variables as local values.
+- Corrected source parsing for `.js` and `.jsx` files so the existing JSX-based rules can analyze JavaScript files containing JSX.
+- Added regression tests for the confirmed rule gaps and supported JavaScript/JSX parsing behavior.
 
 Changes after the latest release will be recorded here.
 
