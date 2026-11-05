@@ -14,4 +14,4 @@ Sudeshi Code Review is a focused static-analysis tool. It may miss vulnerabiliti
 
 When AI review is enabled, selected source context is sent to Sarvam AI. Do not submit source code you are not authorized to share.
 
-Source-context redaction has known limitations, particularly with interpolated template literals. Treat the redaction as a best-effort safeguard, not a guarantee that every sensitive value will be removed.
+AI-context redaction is best-effort. It attempts to redact recognized values and selected repeated occurrences in supported source patterns. It may not detect dynamically constructed values or every secret-bearing syntax pattern; sensitive content may still be sent to Sarvam AI. Treat redaction as a safeguard, not as a guarantee that code is safe to share.

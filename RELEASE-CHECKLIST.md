@@ -1,49 +1,49 @@
-# Release 1.0.0 checklist
+# Release checklist — v1.2.0
 
-Use this checklist on the `release-1.0` branch. Do not publish until all required checks pass.
+This checklist records the v1.2.0 release candidate on `release/1.2.0`. Do not publish until the main-branch merge, tag, and registry checks are complete.
 
-## Version and metadata
+## Version and documentation
 
-- [ ] `package.json` version is `1.0.0`.
-- [ ] `package-lock.json` root package version is `1.0.0` (run `npm version 1.0.0 --no-git-tag-version` to update both files together).
-- [ ] Package name, description, repository URL, homepage, issue URL, license, `bin`, `files`, and Node.js engine are correct.
-- [ ] `README.md` no longer says the package is awaiting its first release.
-- [ ] `CHANGELOG.md` contains the 1.0.0 entry; replace `Unreleased` with the actual release date only when publishing.
-- [ ] `LICENSE`, `SECURITY.md`, and `CONTRIBUTING.md` are present and accurate.
+- [x] `package.json` version is `1.2.0`.
+- [x] `package-lock.json` root package version is `1.2.0`.
+- [x] Package name, repository URL, homepage, issue URL, license, `bin`, `files`, and Node.js engine have been reviewed.
+- [x] `README.md` describes the current report formats, CLI options, installation, and security limitations.
+- [x] `CHANGELOG.md` contains the v1.2.0 release entry.
+- [x] `LICENSE`, `SECURITY.md`, and `CONTRIBUTING.md` are present.
 
-## Clean validation
+## Code and package validation
 
-From a clean checkout of the branch:
+- [x] Formatting, lint, tests, and build pass locally.
+- [x] `npm pack --dry-run --json` succeeds and package contents have been inspected.
+- [x] The v1.2.0 tarball installs in a clean consumer project with `npm install --omit=dev`.
+- [x] TypeScript is available as a production dependency.
+- [x] The installed CLI supports `--help`, `-h`, `--version`, and `-v`.
+- [x] The installed npm `bin` command executes successfully.
+- [x] A sample repository scan detects a `hardcoded-secret` finding.
+- [x] JSON and Markdown reports are generated successfully, and secret evidence is redacted in the JSON report.
+- [x] Deterministic scanning works without `SARVAM_API_KEY`.
+- [ ] GitHub Actions CI is green on the final `release/1.2.0` commit.
+
+## Before publishing to npm
+
+Run these checks using the intended npm publisher account:
 
 ```bash
-npm ci
-npm run format:check
-npm run lint
-npm test
-npm run build
-npm pack --dry-run
+npm whoami
+npm view sudeshi-code-review version
+npm view sudeshi-code-review@1.2.0 version
 ```
 
-- [ ] All commands pass.
-- [ ] Inspect the tarball file list and confirm the built CLI entry point (`dist/index.js`), README, and license are included.
-- [ ] Test the packed package in a temporary directory or clean environment.
-- [ ] Confirm `sudeshi-code-review --help` and `sudeshi-code-review --version` work after installation.
-- [ ] Run the CLI against a known fixture and confirm expected findings and report output.
-- [ ] Check for secrets or private files in the package contents.
-- [ ] Review the documented AI-context redaction limitation; do not make claims that all secrets are always redacted.
+- [ ] Confirm `npm whoami` identifies the intended publisher.
+- [ ] Confirm version `1.2.0` is not already published. If it is, stop; npm versions cannot be overwritten.
+- [ ] Confirm npm authentication and required two-factor authentication are ready.
+- [ ] Publish from the exact v1.2.0 release tag after it points to the approved `main` commit.
 
-## Registry and account
+## Merge, tag, and publish
 
-- [ ] Create and verify the npm account.
-- [ ] Enable two-factor authentication (2FA).
-- [ ] Confirm `npm whoami` identifies the intended account.
-- [ ] Check whether `sudeshi-code-review` is available with `npm view sudeshi-code-review`.
-- [ ] Review npm package contents before publishing.
-
-## GitHub release process
-
-- [ ] Confirm CI is green on `release-1.0`.
-- [ ] Review the final diff and merge the branch to `main`.
-- [ ] Create the `v1.0.0` Git tag/release from the approved commit.
-- [ ] Publish the matching package version to npm only after verifying the tag and package contents.
-- [ ] Verify the registry version and test a fresh install.
+- [ ] Merge `release/1.2.0` into `main` after final review and green CI.
+- [ ] Create and push the annotated Git tag `v1.2.0` on the approved `main` commit.
+- [ ] Check out the tag and run `npm publish --access public`.
+- [ ] Verify `npm view sudeshi-code-review@1.2.0 version` returns `1.2.0`.
+- [ ] Install `sudeshi-code-review@1.2.0` from the registry and verify `sudeshi-code-review --version`.
+- [ ] Publish the GitHub Release for `v1.2.0` with the final release notes and compare link.

@@ -338,4 +338,32 @@ describe('dangerousHtmlRule', () => {
     expect(findings[0].message).toContain('dangerouslySetInnerHTML');
     expect(findings[0].message).toContain('sanitize');
   });
+
+  it('detects dangerouslySetInnerHTML in JSX files', () => {
+    const findings = dangerousHtmlRule({
+      path: 'src/components/UnsafePreview.jsx',
+      content: `return <div dangerouslySetInnerHTML={{ __html: html }} />;`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      file: 'src/components/UnsafePreview.jsx',
+      line: 1,
+    });
+  });
+
+  it('detects dangerouslySetInnerHTML in JavaScript files containing JSX', () => {
+    const findings = dangerousHtmlRule({
+      path: 'src/components/UnsafePreview.js',
+      content: `return <div dangerouslySetInnerHTML={{ __html: html }} />;`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'dangerous-html',
+      file: 'src/components/UnsafePreview.js',
+      line: 1,
+    });
+  });
 });

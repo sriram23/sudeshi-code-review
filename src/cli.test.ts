@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -452,7 +452,7 @@ describe('CLI', () => {
       rmSync(repositoryPath, { recursive: true, force: true });
     }
   });
-  it('prints help without requiring a repository path', async () => {
+  it.each(['--help', '-h'])('prints help using %s', async (flag) => {
     const writeOutput = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
@@ -460,31 +460,43 @@ describe('CLI', () => {
     try {
       const { runCLI } = await import('./cli.js');
 
-      await expect(runCLI(['--help'])).resolves.toBeUndefined();
+      await runCLI([flag]);
 
-      expect(writeOutput).toHaveBeenCalledWith(
-        expect.stringContaining('Usage:'),
-      );
+      const output = writeOutput.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join('');
+
+      expect(output).toContain('Usage:');
+      expect(output).toContain('--format <format>');
+      expect(output).toContain('Examples:');
     } finally {
       writeOutput.mockRestore();
     }
   });
 
-  it('prints the package version without requiring a repository path', async () => {
-    const writeOutput = vi
-      .spyOn(process.stdout, 'write')
-      .mockImplementation(() => true);
+  it.each(['--version', '-v'])(
+    'prints the installed version using %s',
+    async (flag) => {
+      const packageJson = JSON.parse(
+        readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+      ) as { version: string };
 
-    try {
-      const { runCLI } = await import('./cli.js');
+      const writeOutput = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
 
-      await expect(runCLI(['--version'])).resolves.toBeUndefined();
+      try {
+        const { runCLI } = await import('./cli.js');
 
-      expect(writeOutput).toHaveBeenCalledWith('1.1.1\n');
-    } finally {
-      writeOutput.mockRestore();
-    }
-  });
+        await runCLI([flag]);
+
+        expect(writeOutput).toHaveBeenCalledTimes(1);
+        expect(writeOutput).toHaveBeenCalledWith(`${packageJson.version}\n`);
+      } finally {
+        writeOutput.mockRestore();
+      }
+    },
+  );
 
   it('writes a JSON report to stdout when --format json is specified', async () => {
     const { mkdtempSync, rmSync } = await import('node:fs');

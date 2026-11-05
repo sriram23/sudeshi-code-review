@@ -132,4 +132,99 @@ describe('unsafeLinkRule', () => {
 
     expect(findings).toEqual([]);
   });
+
+  it('detects a JavaScript URL in a direct JSX string expression', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/UnsafeLink.tsx',
+      content: `return <a href={'javascript:alert(1)'}>Open destination</a>;`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      rule: 'unsafe-link',
+      file: 'src/components/UnsafeLink.tsx',
+      line: 1,
+      evidence: `return <a href={'javascript:alert(1)'}>Open destination</a>;`,
+    });
+  });
+
+  it('detects a JavaScript URL in a static template expression', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/UnsafeLink.tsx',
+      content: 'return <a href={`  JaVaScRiPt:alert(1)`}>Open destination</a>;',
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.rule).toBe('unsafe-link');
+  });
+
+  it('detects JavaScript URLs in JSX files', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/UnsafeLink.jsx',
+      content: `return <a href={'javascript:alert(1)'}>Open destination</a>;`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.file).toBe('src/components/UnsafeLink.jsx');
+  });
+
+  it('detects JavaScript URLs in JavaScript files containing JSX', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/UnsafeLink.js',
+      content: `return <a href="javascript:alert(1)">Open destination</a>;`,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.file).toBe('src/components/UnsafeLink.js');
+  });
+
+  it('ignores safe static strings inside JSX expressions', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/SafeLink.tsx',
+      content: `return <a href={'https://example.com'}>Visit site</a>;`,
+    });
+
+    expect(findings).toEqual([]);
+  });
+
+  it('detects JavaScript URLs split by tabs or newlines', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/UnsafeLink.tsx',
+      content: String.raw`return <a href={'java\nscript:alert(1)'}>Open destination</a>;`,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it('detects JavaScript URLs containing an escaped tab', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/UnsafeLink.tsx',
+      content: String.raw`return <a href={'java\tscript:alert(1)'}>Open destination</a>;`,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it('ignores a URL with an ordinary space inside the scheme', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/SafeLink.tsx',
+      content: `return <a href={'javascript :alert(1)'}>Open destination</a>;`,
+    });
+
+    expect(findings).toEqual([]);
+  });
+
+  it('does not resolve an outer dangerous URL through a shadowing parameter', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/SafeLink.tsx',
+      content: [
+        'const destination = "javascript:alert(1)";',
+        'function SafeLink(destination: string) {',
+        '  return <a href={destination}>Open destination</a>;',
+        '}',
+      ].join('\n'),
+    });
+
+    expect(findings).toEqual([]);
+  });
 });
