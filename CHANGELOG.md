@@ -4,17 +4,34 @@ Notable user-facing changes are documented here.
 
 ## [Unreleased]
 
+Changes after v1.2.0 will be recorded here.
+
+## [1.2.0] - 2026-11-05
+
 ### Security
 
-- Hardened AI-review context redaction for recognized secret values, repeated occurrences, and existing AI-review metadata.
-- Added regression coverage for short secret values, interpolated templates, and malformed source syntax.
-- Clarified that redaction remains best-effort and cannot guarantee detection or removal of every secret.
-- Improved `hardcoded-secret` detection for credentialed database URLs and quoted or statically computed object-property keys; finding evidence now redacts all detected secret literals on the affected source line.
-- Improved `unsafe-link` detection for JavaScript URLs in direct JSX string expressions and static template expressions, and avoided resolving shadowed outer variables as local values.
-- Corrected source parsing for `.js` and `.jsx` files so the existing JSX-based rules can analyze JavaScript files containing JSX.
-- Added regression tests for the confirmed rule gaps and supported JavaScript/JSX parsing behavior.
+- Hardened AI-review context redaction for recognized secret values, repeated occurrences, and supported object-property patterns, including quoted and statically computed keys.
+- Improved `hardcoded-secret` detection for credentialed database URLs and quoted or statically computed object-property keys.
+- Redacted all detected secret literals from the affected finding-evidence line.
+- Improved `unsafe-link` detection for JavaScript URLs in direct JSX string expressions and static template expressions, while avoiding incorrect resolution of shadowed variables.
+- Corrected parsing of `.js` and `.jsx` files so JSX-based rules can analyze JavaScript files containing JSX.
+- Clarified that AI-context redaction is best-effort and does not guarantee detection or removal of every secret.
 
-Changes after the latest release will be recorded here.
+### CLI and reporting
+
+- Expanded command-line help with usage, options, environment variables, and examples.
+- Added explicit regression coverage for short and long help/version flags.
+- Continued support for Markdown and JSON reports, including writing reports to a specified output path.
+
+### Packaging
+
+- Validated the v1.2.0 tarball in a clean consumer project installed with production dependencies only.
+- Verified the installed CLI entry point, runtime TypeScript dependency, deterministic scan, JSON and Markdown reports, and secret redaction.
+
+### Tests
+
+- Added regression coverage for confirmed redaction and detection-rule gaps, including safe and risky examples.
+- Passed 176 tests across 19 test files, with formatting, lint, and build checks passing.
 
 ## [1.1.1] - 2026-10-24
 

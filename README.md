@@ -1,12 +1,12 @@
 # Sudeshi Code Review
 
-A TypeScript and React code-review CLI that scans JavaScript and TypeScript repositories for selected security patterns and produces a Markdown report. Optional AI-assisted analysis is powered by Sarvam AI.
+A TypeScript and React code-review CLI that scans JavaScript and TypeScript repositories for selected security patterns and produces Markdown or JSON reports. Optional AI-assisted analysis is powered by Sarvam AI.
 
 ## Features
 
 - Scans JavaScript and TypeScript repositories, including JSX and TSX source files.
 - Detects selected dangerous HTML insertion patterns, hardcoded secrets, and JavaScript URLs in JSX links.
-- Reports findings with severity and evidence in Markdown.
+- Reports findings with severity and evidence in Markdown or JSON, with support for saving reports to a file.
 - Works without an AI API key using deterministic rules.
 - Supports optional Sarvam AI analysis using your own API key.
 - Includes automated tests for scanning, rules, reporting, and AI-provider behavior.
@@ -50,11 +50,35 @@ Show the installed version:
 sudeshi-code-review --version
 ```
 
-Provide a repository directory when running a scan. Review the report and validate findings before acting on them.
+### Choose a report format and destination
+
+Interactive terminals display a formatted terminal summary by default. When output is redirected or the process is non-interactive, the default report is Markdown.
+
+Generate machine-readable JSON:
+
+```bash
+sudeshi-code-review /path/to/repository --format json
+```
+
+Save a Markdown report:
+
+```bash
+sudeshi-code-review /path/to/repository --output report.md
+```
+
+Save a JSON report:
+
+```bash
+sudeshi-code-review /path/to/repository --format json --output report.json
+```
+
+The repository path comes first; place options after it. Use `--help` for the complete list of options and examples.
+
+Review findings and validate them before acting on them.
 
 ### Terminal output
 
-Interactive terminals display a formatted summary with severity-colored findings and confidence details. Color output is automatically disabled when stdout is not an interactive terminal or when the `NO_COLOR` environment variable is set. JSON output remains machine-readable and contains no terminal styling.
+Interactive terminals display a formatted summary with severity-colored findings and confidence details. Color output is automatically disabled when stdout is not an interactive terminal or when the `NO_COLOR` environment variable is set. JSON selected with `--format json` remains machine-readable and contains no terminal styling.
 
 Disable terminal colors explicitly:
 
@@ -107,7 +131,7 @@ These rules cover selected patterns, not every possible instance of these issues
 ### Detection scope and interpretation
 
 - **`dangerous-html`:** Flags selected uses of `dangerouslySetInnerHTML`. The rule detects the HTML-insertion sink; it does not establish that the supplied value is attacker-controlled or prove that an exploitable XSS vulnerability exists. A narrowly scoped static JSON-LD case is exempted by the rule.
-- **`hardcoded-secret`:** Detects non-empty static strings and static template literals assigned to supported secret-like variable names or object-property keys. Database URL values are flagged when they contain embedded username and password credentials. Detected secret literals are redacted from finding evidence, but arbitrary secret formats and dynamically constructed values are outside the rule's coverage.
+- **`hardcoded-secret`:** Detects non-empty static strings and static template literals assigned to supported secret-like variable names or object-property keys, including quoted and statically computed property keys. Database URL values are flagged when they contain embedded username and password credentials. Detected secret literals are redacted from finding evidence, but arbitrary secret formats and dynamically constructed values are outside the rule's coverage.
 - **`unsafe-link`:** Detects statically identifiable `javascript:` URLs in JSX `href` attributes, including direct string expressions, static template expressions, and supported locally resolvable variable values. It does not perform comprehensive data-flow analysis of dynamic values.
 
 Finding severity describes the potential impact of a matched pattern. Rule confidence describes confidence in the pattern match; neither value proves exploitability or attacker control. Review the source context before treating a finding as a confirmed vulnerability.
@@ -121,7 +145,7 @@ Sudeshi Code Review is a focused static-analysis tool—not a complete security 
 - Detection is limited to the currently implemented JavaScript and TypeScript rules.
 - A clean report does not establish that a repository is secure.
 - AI assessments can be inaccurate and require human review.
-- AI-context redaction is best-effort. It redacts recognized secret values in supported code patterns and selected repeated occurrences, but cannot guarantee that every secret will be detected or removed. Dynamically constructed values and syntax the implementation does not recognize may still be sent to the configured AI provider.
+- AI-context redaction is best-effort. It attempts to redact recognized secret values in supported code patterns and selected repeated occurrences, but cannot guarantee that every secret will be detected or removed. Dynamically constructed values and syntax the implementation does not recognize may still be sent to the configured AI provider.
 - Review the privacy implications before enabling AI review on private or sensitive repositories.
 
 ## Development
