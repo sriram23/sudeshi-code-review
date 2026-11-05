@@ -1063,4 +1063,53 @@ describe('ReviewEngine', () => {
     expect(sourceFile.content).toBe(source);
     expect(finding.evidence).toBe(`const token = '${secret}';`);
   });
+
+  it('redacts secrets under quoted and statically computed property keys from AI context', async () => {
+    const quotedSecret = 'quoted-property-secret-123456';
+    const computedSecret = 'computed-property-secret-789012';
+    const sourceFile = {
+      path: 'src/Comment.tsx',
+      content: [
+        'export const config = {',
+        `  "paymentApiKey": '${quotedSecret}',`,
+        `  ["clientSecret"]: '${computedSecret}',`,
+        '};',
+        'export const Comment = ({ html }: { html: string }) => <div dangerouslySetInnerHTML={{ __html: html }} />;',
+      ].join('\n'),
+    };
+    const finding: Finding = {
+      id: 'dangerous-html',
+      category: 'security',
+      severity: 'high',
+      confidence: 1,
+      file: sourceFile.path,
+      line: 5,
+      rule: 'dangerous-html',
+      message: 'dangerouslySetInnerHTML is used',
+      evidence:
+        'export const Comment = ({ html }: { html: string }) => <div dangerouslySetInnerHTML={{ __html: html }} />;',
+      requiresAIReview: true,
+    };
+    const originalSource = sourceFile.content;
+    const originalFinding = structuredClone(finding);
+    const analyze = vi.fn().mockResolvedValue({
+      valid: true,
+      confidence: 0.9,
+      reason: 'Reviewed the finding.',
+      recommendation: 'Review the HTML source before rendering.',
+    });
+    const engine = new ReviewEngine({ provider: { analyze } });
+
+    await engine.review({ files: [sourceFile], findings: [finding] });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const aiBoundRequest = JSON.stringify(analyze.mock.calls[0]?.[0]);
+    expect(aiBoundRequest).not.toContain(quotedSecret);
+    expect(aiBoundRequest).not.toContain(computedSecret);
+    expect(aiBoundRequest).toContain('[REDACTED]');
+
+    // Redaction must not mutate the original source or finding.
+    expect(sourceFile.content).toBe(originalSource);
+    expect(finding).toEqual(originalFinding);
+  });
 });
