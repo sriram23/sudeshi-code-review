@@ -1,7 +1,7 @@
 # Sudeshi Code Review — v1.2.0 Release Plan
 
-**Status:** Proposed plan for freeze
-**Current version:** `v1.1.1`
+**Status:** Implementation complete; pending final validation, main-branch merge, npm publication, and GitHub release
+**Current version:** `v1.2.0` (release candidate on `release/1.2.0`)
 **Target version:** `v1.2.0`
 **Release theme:** Security hardening and trustworthy findings
 **Estimated duration:** 4 weeks
