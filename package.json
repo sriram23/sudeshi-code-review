@@ -1,6 +1,6 @@
 {
   "name": "sudeshi-code-review",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "A TypeScript and React code review CLI with security rules and optional Sarvam AI analysis.",
   "homepage": "https://github.com/sriram23/sudeshi-code-review#readme",
   "bugs": {
@@ -13,7 +13,6 @@
   "license": "MIT",
   "author": "Sriram B",
   "type": "module",
-  "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
