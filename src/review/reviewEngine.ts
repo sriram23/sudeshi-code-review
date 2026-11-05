@@ -36,6 +36,29 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function getStaticPropertyName(name: ts.PropertyName): string | undefined {
+  if (
+    ts.isIdentifier(name) ||
+    ts.isStringLiteral(name) ||
+    ts.isNoSubstitutionTemplateLiteral(name)
+  ) {
+    return name.text;
+  }
+
+  if (ts.isComputedPropertyName(name)) {
+    const expression = name.expression;
+
+    if (
+      ts.isStringLiteral(expression) ||
+      ts.isNoSubstitutionTemplateLiteral(expression)
+    ) {
+      return expression.text;
+    }
+  }
+
+  return undefined;
+}
+
 function hasStandaloneSecret(value: string, secret: string): boolean {
   if (!/^[\w$]+$/.test(secret)) {
     return value === secret;
@@ -124,8 +147,8 @@ export class ReviewEngine {
       if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
         name = node.name.text;
         initializer = node.initializer;
-      } else if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name)) {
-        name = node.name.text;
+      } else if (ts.isPropertyAssignment(node)) {
+        name = getStaticPropertyName(node.name);
         initializer = node.initializer;
       }
 
