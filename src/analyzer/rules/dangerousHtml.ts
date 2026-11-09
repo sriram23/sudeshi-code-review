@@ -9,6 +9,81 @@ export const dangerousHtmlRule: Rule = (file: SourceFile) => {
   const findings: Finding[] = [];
   const sourceFile = createSourceFile(file.path, file.content);
 
+  function bindingPatternContainsName(
+    bindingName: ts.BindingName,
+    name: string,
+  ): boolean {
+    if (ts.isIdentifier(bindingName)) {
+      return bindingName.text === name;
+    }
+
+    return bindingName.elements.some(
+      (element) =>
+        ts.isBindingElement(element) &&
+        bindingPatternContainsName(element.name, name),
+    );
+  }
+
+  type FunctionLikeNode =
+    | ts.FunctionDeclaration
+    | ts.FunctionExpression
+    | ts.ArrowFunction
+    | ts.MethodDeclaration
+    | ts.ConstructorDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration;
+
+  function isFunctionLikeNode(node: ts.Node): node is FunctionLikeNode {
+    return (
+      ts.isFunctionDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isArrowFunction(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isConstructorDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node)
+    );
+  }
+
+  function findFunctionScopedVarDeclaration(
+    body: ts.Block,
+    name: string,
+  ): ts.VariableDeclaration | undefined {
+    let result: ts.VariableDeclaration | undefined;
+
+    function visit(node: ts.Node): void {
+      if (result) {
+        return;
+      }
+
+      // Nested functions and classes have their own scopes.
+      if (
+        node !== body &&
+        (isFunctionLikeNode(node) ||
+          ts.isClassDeclaration(node) ||
+          ts.isClassExpression(node))
+      ) {
+        return;
+      }
+
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isVariableDeclarationList(node.parent) &&
+        (node.parent.flags & ts.NodeFlags.BlockScoped) === 0 &&
+        bindingPatternContainsName(node.name, name)
+      ) {
+        result = node;
+        return;
+      }
+
+      ts.forEachChild(node, visit);
+    }
+
+    visit(body);
+
+    return result;
+  }
+
   function findDeclarationInScope(
     node: ts.Node,
     name: string,
@@ -16,6 +91,62 @@ export const dangerousHtmlRule: Rule = (file: SourceFile) => {
     let current: ts.Node | undefined = node.parent;
 
     while (current) {
+      // Function parameters shadow declarations outside their function.
+      if (
+        ts.isBlock(current) &&
+        isFunctionLikeNode(current.parent) &&
+        current.parent.body === current &&
+        current.parent.parameters.some((parameter) =>
+          bindingPatternContainsName(parameter.name, name),
+        )
+      ) {
+        return undefined;
+      }
+
+      // Check loop-scoped declarations.
+      if (
+        ts.isForStatement(current) ||
+        ts.isForInStatement(current) ||
+        ts.isForOfStatement(current)
+      ) {
+        const initializer = current.initializer;
+
+        if (initializer && ts.isVariableDeclarationList(initializer)) {
+          for (const declaration of initializer.declarations) {
+            if (bindingPatternContainsName(declaration.name, name)) {
+              return declaration;
+            }
+          }
+        }
+      }
+
+      // Catch parameters shadow declarations outside the catch clause.
+      if (
+        ts.isCatchClause(current) &&
+        current.variableDeclaration &&
+        bindingPatternContainsName(current.variableDeclaration.name, name)
+      ) {
+        return undefined;
+      }
+
+      // Declarations in switch clauses share the switch statement's scope.
+      if (ts.isCaseBlock(current)) {
+        for (const clause of current.clauses) {
+          for (const statement of clause.statements) {
+            if (!ts.isVariableStatement(statement)) {
+              continue;
+            }
+
+            for (const declaration of statement.declarationList.declarations) {
+              if (bindingPatternContainsName(declaration.name, name)) {
+                return declaration;
+              }
+            }
+          }
+        }
+      }
+
+      // Resolve declarations in the current block or module.
       if (ts.isBlock(current) || ts.isSourceFile(current)) {
         for (const statement of current.statements) {
           if (!ts.isVariableStatement(statement)) {
@@ -23,47 +154,121 @@ export const dangerousHtmlRule: Rule = (file: SourceFile) => {
           }
 
           for (const declaration of statement.declarationList.declarations) {
-            if (
-              ts.isIdentifier(declaration.name) &&
-              declaration.name.text === name
-            ) {
+            if (bindingPatternContainsName(declaration.name, name)) {
               return declaration;
             }
           }
         }
       }
 
-      if (
-        ts.isFunctionDeclaration(current) ||
-        ts.isFunctionExpression(current) ||
-        ts.isArrowFunction(current) ||
-        ts.isMethodDeclaration(current)
-      ) {
-        // Inspect this function's body before crossing its scope boundary.
-        if (current.body && ts.isBlock(current.body)) {
-          for (const statement of current.body.statements) {
-            if (!ts.isVariableStatement(statement)) {
-              continue;
-            }
+      if (isFunctionLikeNode(current)) {
+        const isShadowedByParameter = current.parameters.some((parameter) =>
+          bindingPatternContainsName(parameter.name, name),
+        );
 
-            for (const declaration of statement.declarationList.declarations) {
-              if (
-                ts.isIdentifier(declaration.name) &&
-                declaration.name.text === name
-              ) {
-                return declaration;
-              }
-            }
-          }
+        if (isShadowedByParameter) {
+          return undefined;
         }
 
-        return undefined;
+        if (current.body && ts.isBlock(current.body)) {
+          const declaration = findFunctionScopedVarDeclaration(
+            current.body,
+            name,
+          );
+
+          if (declaration) {
+            return declaration;
+          }
+        }
       }
 
+      // Continue outward to support closures and module-level declarations.
       current = current.parent;
     }
 
     return undefined;
+  }
+
+  function getAccessRootIdentifier(
+    expression: ts.Expression,
+  ): ts.Identifier | undefined {
+    if (ts.isIdentifier(expression)) {
+      return expression;
+    }
+
+    if (
+      ts.isPropertyAccessExpression(expression) ||
+      ts.isElementAccessExpression(expression) ||
+      ts.isParenthesizedExpression(expression) ||
+      ts.isAsExpression(expression) ||
+      ts.isTypeAssertionExpression(expression) ||
+      ts.isNonNullExpression(expression)
+    ) {
+      return getAccessRootIdentifier(expression.expression);
+    }
+
+    return undefined;
+  }
+
+  function hasMutationOfDeclaration(
+    declaration: ts.VariableDeclaration,
+    name: string,
+  ): boolean {
+    let mutated = false;
+
+    function referencesDeclaration(expression: ts.Expression): boolean {
+      const root = getAccessRootIdentifier(expression);
+
+      return Boolean(
+        root &&
+        root.text === name &&
+        findDeclarationInScope(root, name) === declaration,
+      );
+    }
+
+    function visit(node: ts.Node): void {
+      if (mutated) {
+        return;
+      }
+
+      // Assignment and compound assignment.
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+        node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+        referencesDeclaration(node.left)
+      ) {
+        mutated = true;
+        return;
+      }
+
+      // Increment and decrement.
+      if (
+        (ts.isPrefixUnaryExpression(node) ||
+          ts.isPostfixUnaryExpression(node)) &&
+        (node.operator === ts.SyntaxKind.PlusPlusToken ||
+          node.operator === ts.SyntaxKind.MinusMinusToken) &&
+        referencesDeclaration(node.operand)
+      ) {
+        mutated = true;
+        return;
+      }
+
+      // Property deletion.
+      if (
+        ts.isDeleteExpression(node) &&
+        referencesDeclaration(node.expression)
+      ) {
+        mutated = true;
+        return;
+      }
+
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+
+    return mutated;
   }
 
   function isStaticJsonLd(node: ts.JsxAttribute): boolean {
@@ -147,8 +352,27 @@ export const dangerousHtmlRule: Rule = (file: SourceFile) => {
 
     const declaration = findDeclarationInScope(node, argument.text);
 
+    // A destructured binding cannot be treated as the original static object.
+    if (!declaration || !ts.isIdentifier(declaration.name)) {
+      return false;
+    }
+
+    // Only trust const declarations for static JSON-LD.
+    const declarationList = declaration.parent;
+
+    if (
+      !ts.isVariableDeclarationList(declarationList) ||
+      (declarationList.flags & ts.NodeFlags.Const) === 0
+    ) {
+      return false;
+    }
+
+    // A const object can still have mutable properties.
+    if (hasMutationOfDeclaration(declaration, argument.text)) {
+      return false;
+    }
+
     return Boolean(
-      declaration &&
       declaration.initializer &&
       ts.isObjectLiteralExpression(declaration.initializer) &&
       declaration.initializer.properties.every(
