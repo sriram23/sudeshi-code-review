@@ -366,4 +366,368 @@ describe('dangerousHtmlRule', () => {
       line: 1,
     });
   });
+  it('does not flag static JSON-LD backed by a module-level declaration', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    export function StructuredData() {
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toEqual([]);
+  });
+  it('flags JSON-LD when a parameter shadows a module-level declaration', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    export function StructuredData({
+      structuredData,
+    }: {
+      structuredData: unknown;
+    }) {
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('does not exempt JSON-LD when a function-scoped var shadows module-level data', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    export function StructuredData() {
+      if (someCondition) {
+        var structuredData = getUntrustedData();
+      }
+
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('does not exempt JSON-LD when a destructured var shadows module-level data', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    export function StructuredData() {
+      if (someCondition) {
+        var { structuredData } = getUntrustedData();
+      }
+
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('does not exempt JSON-LD when a loop variable shadows module-level data', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    export function StructuredData(items: unknown[]) {
+      for (const structuredData of items) {
+        return (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(structuredData),
+            }}
+          />
+        );
+      }
+
+      return null;
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('does not exempt JSON-LD when a catch parameter shadows module-level data', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    export function StructuredData() {
+      try {
+        throw getUntrustedData();
+      } catch (structuredData) {
+        return (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(structuredData),
+            }}
+          />
+        );
+      }
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('flags JSON-LD when module-level structured data is mutated', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    structuredData.name = userInput;
+
+    export function StructuredData() {
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('flags JSON-LD when module-level structured data is reassigned', () => {
+    const content = `
+    let structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    structuredData = getUntrustedData();
+
+    export function StructuredData() {
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('flags JSON-LD when module-level structured data is modified with compound assignment', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    structuredData.name += userInput;
+
+    export function StructuredData() {
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it('flags JSON-LD when a property is deleted from module-level structured data', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    delete structuredData.name;
+
+    export function StructuredData() {
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      );
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('does not exempt JSON-LD when a block-scoped destructured binding shadows module-level data', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    export function StructuredData() {
+      {
+        const { structuredData } = getUntrustedData();
+
+        return (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(structuredData),
+            }}
+          />
+        );
+      }
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+  it('does not exempt JSON-LD when a switch-case declaration shadows module-level data', () => {
+    const content = `
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Sudeshi Code Review',
+    };
+
+    export function StructuredData(value: number) {
+      switch (value) {
+        case 1:
+          const structuredData = getUntrustedData();
+
+          return (
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{
+                __html: JSON.stringify(structuredData),
+              }}
+            />
+          );
+        default:
+          return null;
+      }
+    }
+  `;
+
+    const findings = dangerousHtmlRule({
+      path: 'StructuredData.tsx',
+      content,
+    });
+
+    expect(findings).toHaveLength(1);
+  });
 });
