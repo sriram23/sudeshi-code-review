@@ -187,13 +187,26 @@ describe('unsafeLinkRule', () => {
     expect(findings).toEqual([]);
   });
 
-  it('detects JavaScript URLs split by tabs or newlines', () => {
+  it('detects a JavaScript URL containing an escaped newline in a quoted href value', () => {
     const findings = unsafeLinkRule({
       path: 'src/components/UnsafeLink.tsx',
       content: String.raw`return <a href={'java\nscript:alert(1)'}>Open destination</a>;`,
     });
 
     expect(findings).toHaveLength(1);
+  });
+
+  it('detects a JavaScript URL containing a physical newline in a static template expression', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/UnsafeLink.tsx',
+      content: [
+        'return <a href={`java',
+        'script:alert(1)`}>Open destination</a>;',
+      ].join('\n'),
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.rule).toBe('unsafe-link');
   });
 
   it('detects JavaScript URLs containing an escaped tab', () => {
@@ -209,6 +222,24 @@ describe('unsafeLinkRule', () => {
     const findings = unsafeLinkRule({
       path: 'src/components/SafeLink.tsx',
       content: `return <a href={'javascript :alert(1)'}>Open destination</a>;`,
+    });
+
+    expect(findings).toEqual([]);
+  });
+
+  it('ignores ordinary spaces between characters in the URL scheme', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/SafeLink.tsx',
+      content: `return <a href={'java script:alert(1)'}>Open destination</a>;`,
+    });
+
+    expect(findings).toEqual([]);
+  });
+
+  it('does not treat non-ASCII whitespace as URL-trimmable leading whitespace', () => {
+    const findings = unsafeLinkRule({
+      path: 'src/components/SafeLink.tsx',
+      content: String.raw`return <a href={'\u00a0javascript:alert(1)'}>Open destination</a>;`,
     });
 
     expect(findings).toEqual([]);

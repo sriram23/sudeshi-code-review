@@ -27,13 +27,29 @@ export const unsafeLinkRule: Rule = (file) => {
       return false;
     }
 
-    // The URL parser removes ASCII tabs and newlines before scheme parsing,
-    // but an ordinary space inside the scheme makes it a different URL.
-    const normalizedValue = expression.text.replace(/[\t\n\r]/g, '');
+    // Match the URL parser's preprocessing before checking the scheme:
+    // trim leading/trailing C0 controls and spaces, then remove ASCII
+    // tabs and newlines wherever they occur. Do not remove internal spaces.
 
-    return /^\s*javascript:/i.test(normalizedValue);
+    let start = 0;
+    let end = expression.text.length;
+
+    while (start < end && expression.text.charCodeAt(start) <= 0x20) {
+      start += 1;
+    }
+
+    while (end > start && expression.text.charCodeAt(end - 1) <= 0x20) {
+      end -= 1;
+    }
+
+    const normalizedValue = expression.text
+      .slice(start, end)
+      .replaceAll('\t', '')
+      .replaceAll('\n', '')
+      .replaceAll('\r', '');
+
+    return /^javascript:/i.test(normalizedValue);
   }
-
   function bindingContainsName(
     bindingName: ts.BindingName,
     name: string,
